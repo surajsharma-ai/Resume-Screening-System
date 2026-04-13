@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Notifications</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <nav class="navbar applicant-nav">
+        <div class="nav-brand"><i class="fas fa-bullseye"></i> AI Resume Screener</div>
+        <div class="nav-links">
+            <a href="{{ url_for('applicant_dashboard') }}"><i class="fas fa-home"></i> Dashboard</a>
+            <a href="{{ url_for('browse_jobs') }}"><i class="fas fa-search"></i> Browse Jobs</a>
+            <a href="{{ url_for('my_applications') }}"><i class="fas fa-file-alt"></i> My Applications</a>
+            <a href="{{ url_for('notifications') }}"><i class="fas fa-bell"></i> Notifications</a>
+            <a href="{{ url_for('logout') }}" class="btn-logout"><i class="fas fa-sign-out-alt"></i> Logout</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <h1><i class="fas fa-bell"></i> Notifications</h1>
+
+        {% if notifications %}
+        <div class="notif-list">
+            {% for n in notifications %}
+            <div class="notif-card {{ n.type }}">
+                <div class="notif-icon">
+                    {% if n.type == 'success' %}<i class="fas fa-check-circle"></i>
+                    {% elif n.type == 'danger' %}<i class="fas fa-times-circle"></i>
+                    {% else %}<i class="fas fa-info-circle"></i>{% endif %}
+                </div>
+                <div class="notif-content">
+                    <h4>{{ n.title }}</h4>
+                    <p>{{ n.message }}</p>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <i class="fas fa-bell-slash"></i>
+            <p>No notifications</p>
+        </div>
+        {% endif %}
+    </div>
+</body>
+</html>

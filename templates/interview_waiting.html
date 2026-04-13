@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interview Waiting</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        .waiting-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background: var(--light);
+            text-align: center;
+            padding: 2rem;
+        }
+        .waiting-card {
+            background: white;
+            padding: 3rem 4rem;
+            border-radius: 20px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+            max-width: 500px;
+            width: 100%;
+        }
+        .waiting-card i.main-icon {
+            font-size: 4rem;
+            color: var(--primary);
+            margin-bottom: 1.5rem;
+        }
+        .waiting-card h1 {
+            color: var(--dark);
+            margin-bottom: 1rem;
+        }
+        .waiting-card p {
+            color: var(--gray);
+            margin-bottom: 2rem;
+            font-size: 1.1rem;
+        }
+        .time-box {
+            background: #e3f2fd;
+            padding: 1rem 2rem;
+            border-radius: 10px;
+            font-weight: 600;
+            color: var(--primary);
+            font-size: 1.25rem;
+            display: inline-block;
+            margin-bottom: 2rem;
+            border: 1px solid rgba(102, 126, 234, 0.2);
+        }
+        .btn-waiting-back {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+            border-radius: 8px;
+            padding: 0.75rem 1.5rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-weight: 600;
+            transition: all 0.3s;
+            text-decoration: none;
+            border: none;
+        }
+        .btn-waiting-back:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="waiting-container">
+        <div class="waiting-card">
+            <i class="fas fa-hourglass-half main-icon"></i>
+            <h1>Too Early!</h1>
+            <p>The interview has not started yet. Please wait until the scheduled date and time to join the room.</p>
+            <div class="time-box">
+                <i class="fas fa-calendar-alt"></i> {{ date }} at {{ time }}
+            </div>
+            <br>
+            {% if role == 'recruiter' %}
+                <a href="{{ url_for('recruiter_dashboard') }}" class="btn-waiting-back"><i class="fas fa-arrow-left"></i> Back to Dashboard</a>
+            {% else %}
+                <a href="{{ url_for('applicant_dashboard') }}" class="btn-waiting-back"><i class="fas fa-arrow-left"></i> Back to Dashboard</a>
+            {% endif %}
+        </div>
+    </div>
+</body>
+</html>

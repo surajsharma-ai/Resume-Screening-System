@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Applications</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+
+<body>
+    <nav class="navbar applicant-nav">
+        <div class="nav-brand"><i class="fas fa-bullseye"></i> AI Resume Screener</div>
+        <div class="nav-links">
+            <a href="{{ url_for('applicant_dashboard') }}"><i class="fas fa-home"></i> Dashboard</a>
+            <a href="{{ url_for('browse_jobs') }}"><i class="fas fa-search"></i> Browse Jobs</a>
+            <a href="{{ url_for('my_applications') }}"><i class="fas fa-file-alt"></i> My Applications</a>
+            <a href="{{ url_for('notifications') }}"><i class="fas fa-bell"></i> Notifications</a>
+            <a href="{{ url_for('logout') }}" class="btn-logout"><i class="fas fa-sign-out-alt"></i> Logout</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for category, message in messages %}
+        <div class="alert alert-{{ category }}">{{ message }}</div>
+        {% endfor %}
+        {% endwith %}
+
+        <h1><i class="fas fa-file-alt"></i> My Applications</h1>
+
+        {% if applications %}
+        <div class="my-apps-list">
+            {% for app in applications %}
+            <div class="my-app-card {{ app.status }}">
+                <div class="status-icon">
+                    {% if app.status == 'hired' %}<i class="fas fa-check-circle text-success"></i>
+                    {% elif app.status == 'rejected' %}<i class="fas fa-times-circle text-danger"></i>
+                    {% elif app.status in ['selected', 'questions_answered'] %}<i class="fas fa-star text-warning"></i>
+                    {% elif app.status == 'interview_scheduled' %}<i class="fas fa-calendar-check"
+                        style="color: var(--info);"></i>
+                    {% elif app.status == 'interviewed' %}<i class="fas fa-microphone"
+                        style="color: var(--secondary);"></i>
+                    {% else %}<i class="fas fa-clock text-warning"></i>{% endif %}
+                </div>
+                <div class="app-info">
+                    <h3>{{ app.title }}</h3>
+                    <p>{{ app.company }}</p>
+                    <div class="mini-scores">
+                        <span><strong>{{ "%.0f"|format(app.match_score) }}%</strong> Match</span>
+                        <span><strong>{{ "%.0f"|format(app.skill_score) }}%</strong> Skills</span>
+                    </div>
+                    {% if app.resume_text %}
+                    <details style="margin-top: 1rem; cursor: pointer;">
+                        <summary style="font-weight: 500; color: var(--primary);"><i class="fas fa-file-text"></i> View
+                            Uploaded Resume</summary>
+                        <pre
+                            style="background: var(--light); padding: 1rem; border-radius: 8px; margin-top: 0.5rem; max-height: 200px; overflow-y: auto; font-size: 0.85rem; white-space: pre-wrap; color: var(--dark); border: 1px solid #e0e0e0;">{{ app.resume_text }}</pre>
+                    </details>
+                    {% endif %}
+                </div>
+                <div class="status-msg">
+                    {% if app.status == 'hired' %}
+                    <div class="msg success"><i class="fas fa-trophy"></i> Congratulations! You're Hired!</div>
+                    {% elif app.status == 'rejected' %}
+                    <div class="msg danger">Not selected for this role</div>
+                    {% elif app.status in ['selected', 'questions_answered'] %}
+                    <div class="msg success"><i class="fas fa-star"></i> Selected for Next Round!</div>
+                    <a href="{{ url_for('answer_questions', app_id=app.id) }}" class="btn btn-primary btn-sm" style="margin-top: 0.5rem; display: inline-block;">
+                        <i class="fas fa-clipboard-list"></i> {% if app.status == 'questions_answered' %}Edit Answers{% else %}Answer Questions{% endif %}
+                    </a>
+                    {% elif app.status == 'interview_scheduled' %}
+                    <div class="msg interview-scheduled">
+                        <i class="fas fa-calendar-check"></i> Interview Scheduled
+                        {% if app.interview_date %}
+                        <br><small>{{ app.interview_date }} at {{ app.interview_time }}</small>
+                        {% endif %}
+                    </div>
+                    {% if app.interview_room_id %}
+                    <a href="{{ url_for('interview_room', room_id=app.interview_room_id) }}"
+                        class="btn btn-interview btn-sm" style="margin-top: 0.5rem;">
+                        <i class="fas fa-video"></i> Join Interview
+                    </a>
+                    {% endif %}
+                    {% elif app.status == 'interviewed' %}
+                    <div class="msg info"><i class="fas fa-microphone"></i> Interview Completed – Results Pending</div>
+                    {% else %}
+                    <div class="msg info">Under review</div>
+                    {% endif %}
+                </div>
+                {% if app.status == 'pending' %}
+                <button class="btn btn-delete btn-sm delete-app-btn" data-id="{{ app.id }}" title="Delete Application">
+                    <i class="fas fa-trash-alt"></i> Delete
+                </button>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <i class="fas fa-inbox"></i>
+            <p>No applications yet. <a href="{{ url_for('browse_jobs') }}">Browse jobs</a></p>
+        </div>
+        {% endif %}
+    </div>
+
+
+
+    <script>
+        document.querySelectorAll('.delete-app-btn').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var appId = this.getAttribute('data-id');
+                if (confirm('Are you sure you want to delete this application? This cannot be undone.')) {
+                    fetch('/applicant/delete-application/' + appId, { method: 'POST' })
+                        .then(function (r) { return r.json(); })
+                        .then(function (d) { alert(d.message); location.reload(); });
+                }
+            });
+        });
+
+
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Resume Screening System</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <div class="landing-container">
+        <div class="hero">
+            <h1><i class="fas fa-bullseye"></i> AI Resume Screening System</h1>
+            <p>Intelligent Resume Matching & Ranking Platform</p>
+        </div>
+
+        <div class="cards-container">
+            <div class="card recruiter-card">
+                <div class="card-icon"><i class="fas fa-user-tie"></i></div>
+                <h2>Recruiter</h2>
+                <p>Post jobs, screen resumes, and hire talent</p>
+                <div class="card-buttons">
+                    <a href="{{ url_for('recruiter_login') }}" class="btn btn-primary">Login</a>
+                    <a href="{{ url_for('recruiter_register') }}" class="btn btn-outline">Register</a>
+                </div>
+            </div>
+
+            <div class="card applicant-card">
+                <div class="card-icon"><i class="fas fa-user-graduate"></i></div>
+                <h2>Applicant</h2>
+                <p>Browse jobs, apply, and track applications</p>
+                <div class="card-buttons">
+                    <a href="{{ url_for('applicant_login') }}" class="btn btn-success">Login</a>
+                    <a href="{{ url_for('applicant_register') }}" class="btn btn-outline-success">Register</a>
+                </div>
+            </div>
+        </div>
+
+        <div class="features">
+            <h3><i class="fas fa-star"></i> Features</h3>
+            <div class="feature-grid">
+                <div class="feature"><i class="fas fa-robot"></i><span>AI Matching</span></div>
+                <div class="feature"><i class="fas fa-user-secret"></i><span>Bias Removal</span></div>
+                <div class="feature"><i class="fas fa-chart-bar"></i><span>Rankings</span></div>
+                <div class="feature"><i class="fas fa-bell"></i><span>Notifications</span></div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Screening Questions - {{ job.title }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+
+<body>
+    <nav class="navbar applicant-nav">
+        <div class="nav-brand"><i class="fas fa-bullseye"></i> AI Resume Screener</div>
+        <div class="nav-links">
+            <a href="{{ url_for('applicant_dashboard') }}"><i class="fas fa-home"></i> Dashboard</a>
+            <a href="{{ url_for('my_applications') }}"><i class="fas fa-file-alt"></i> My Applications</a>
+            <a href="{{ url_for('notifications') }}"><i class="fas fa-bell"></i> Notifications</a>
+            <a href="{{ url_for('logout') }}" class="btn-logout"><i class="fas fa-sign-out-alt"></i> Logout</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for category, message in messages %}
+        <div class="alert alert-{{ category }}">{{ message }}</div>
+        {% endfor %}
+        {% endwith %}
+
+        <div class="page-header">
+            <h1><i class="fas fa-clipboard-list"></i> Screening Questions</h1>
+            <a href="{{ url_for('my_applications') }}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> Back
+            </a>
+        </div>
+
+        <div class="form-card" style="max-width: 800px; margin: 0 auto;">
+            <div class="form-header text-center" style="margin-bottom: 2rem;">
+                <i class="fas fa-info-circle text-primary" style="font-size: 2.5rem; margin-bottom: 1rem;"></i>
+                <h2>{{ job.title }}</h2>
+                <p class="text-muted">{{ job.company }} &bull; {{ job.location or 'Remote' }}</p>
+                <p style="margin-top: 1rem; color: #555;">
+                    Please answer the following screening questions carefully. Your responses will help the interviewer
+                    prepare and tailor the interview to your experience.
+                </p>
+            </div>
+
+            <form method="POST">
+                {% for q in questions %}
+                <div class="form-group" style="background: var(--light); padding: 1.5rem; border-radius: 8px; margin-bottom: 1.5rem; border-left: 4px solid var(--primary);">
+                    <label style="font-size: 1.1rem; color: var(--dark); font-weight: 600; margin-bottom: 0.75rem;">
+                        <span style="color: var(--primary); margin-right: 0.5rem;">Q{{ loop.index }}.</span>{{ q.question }}
+                    </label>
+                    <textarea name="response_{{ q.id }}" class="form-control" rows="4" 
+                        placeholder="Type your detailed answer here..." required>{{ existing.get(q.id, '') }}</textarea>
+                </div>
+                {% endfor %}
+
+                <div style="margin-top: 2rem;">
+                    <button type="submit" class="btn btn-primary btn-block">
+                        <i class="fas fa-paper-plane"></i> Submit All Responses
+                    </button>
+                    <p class="text-muted text-center" style="margin-top: 1rem; font-size: 0.9rem;">
+                        You can update your responses until the interview is scheduled.
+                    </p>
+                </div>
+            </form>
+        </div>
+    </div>
+</body>
+
+</html>

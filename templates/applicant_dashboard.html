@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Applicant Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <nav class="navbar applicant-nav">
+        <div class="nav-brand"><i class="fas fa-bullseye"></i> AI Resume Screener</div>
+        <div class="nav-links">
+            <a href="{{ url_for('applicant_dashboard') }}"><i class="fas fa-home"></i> Dashboard</a>
+            <a href="{{ url_for('browse_jobs') }}"><i class="fas fa-search"></i> Browse Jobs</a>
+            <a href="{{ url_for('my_applications') }}"><i class="fas fa-file-alt"></i> My Applications</a>
+            <a href="{{ url_for('notifications') }}">
+                <i class="fas fa-bell"></i> Notifications
+                {% if notif_count > 0 %}<span class="badge">{{ notif_count }}</span>{% endif %}
+            </a>
+            <a href="{{ url_for('logout') }}" class="btn-logout"><i class="fas fa-sign-out-alt"></i> Logout</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endwith %}
+
+        <div class="dashboard-header">
+            <h1><i class="fas fa-user-graduate"></i> Welcome, {{ session.fullname }}!</h1>
+        </div>
+
+        <div class="quick-links">
+            <a href="{{ url_for('browse_jobs') }}" class="quick-card">
+                <i class="fas fa-search"></i>
+                <h3>Browse Jobs</h3>
+                <p>Find opportunities</p>
+            </a>
+            <a href="{{ url_for('my_applications') }}" class="quick-card">
+                <i class="fas fa-file-alt"></i>
+                <h3>My Applications</h3>
+                <p>Track your applications</p>
+            </a>
+            <a href="{{ url_for('notifications') }}" class="quick-card">
+                <i class="fas fa-bell"></i>
+                <h3>Notifications</h3>
+                {% if notif_count > 0 %}<span class="badge">{{ notif_count }} new</span>{% endif %}
+            </a>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Apply - {{ job.title }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+
+<body>
+    <nav class="navbar applicant-nav">
+        <div class="nav-brand"><i class="fas fa-bullseye"></i> AI Resume Screener</div>
+        <div class="nav-links">
+            <a href="{{ url_for('applicant_dashboard') }}"><i class="fas fa-home"></i> Dashboard</a>
+            <a href="{{ url_for('browse_jobs') }}"><i class="fas fa-search"></i> Browse Jobs</a>
+            <a href="{{ url_for('logout') }}" class="btn-logout"><i class="fas fa-sign-out-alt"></i> Logout</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        {% for category, message in messages %}
+        <div class="alert alert-{{ category }}" style="margin-bottom: 20px;">{{ message }}</div>
+        {% endfor %}
+        {% endif %}
+        {% endwith %}
+
+        <div class="job-detail-card">
+            <h2><i class="fas fa-briefcase"></i> {{ job.title }}</h2>
+            <p><i class="fas fa-building"></i> {{ job.company }} | <i class="fas fa-map-marker-alt"></i> {{ job.location
+                or 'Remote' }}</p>
+            <h4>Description</h4>
+            <p>{{ job.description }}</p>
+            <h4>Requirements</h4>
+            <p>{{ job.requirements }}</p>
+            <h4>Required Skills</h4>
+            <div class="skill-tags">{% for s in job.skills %}<span class="tag">{{ s }}</span>{% endfor %}</div>
+        </div>
+
+        {% if result %}
+        <div class="result-card">
+            <h2><i class="fas fa-chart-line"></i> Your Match Results</h2>
+            <div class="big-scores">
+                <div
+                    class="big-score {% if result.match_score >= 70 %}high{% elif result.match_score >= 50 %}medium{% else %}low{% endif %}">
+                    <span>{{ result.match_score }}%</span>
+                    <small>Match Score</small>
+                </div>
+                <div class="score-info">
+                    <p><strong>{{ result.skill_score }}%</strong> Skill Match</p>
+                    <p><strong>{{ result.experience }}</strong> Years Experience</p>
+                </div>
+            </div>
+            <div class="skills-result">
+                <div>
+                    <h4><i class="fas fa-check text-success"></i> Matched Skills</h4>
+                    <div class="skill-tags">{% for s in result.matched %}<span class="tag success">{{ s }}</span>{%
+                        endfor %}</div>
+                </div>
+                <div>
+                    <h4><i class="fas fa-exclamation-triangle text-warning"></i> Skills to Improve</h4>
+                    <div class="skill-tags">
+                        {% for s in result.missing %}<span class="tag danger">{{ s }}</span>{% endfor %}
+                        {% if not result.missing %}<span class="text-success">No gaps!</span>{% endif %}
+                    </div>
+                </div>
+            </div>
+            <a href="{{ url_for('my_applications') }}" class="btn btn-primary"><i class="fas fa-list"></i> View All
+                Applications</a>
+        </div>
+        {% else %}
+        <div class="upload-card">
+            <h2><i class="fas fa-upload"></i> Upload Resume</h2>
+            <form method="POST" enctype="multipart/form-data">
+                <div class="file-upload">
+                    <input type="file" name="resume" id="resume" accept=".pdf" required>
+                    <label for="resume">
+                        <i class="fas fa-cloud-upload-alt"></i>
+                        <span>Choose file (PDF only)</span>
+                    </label>
+                </div>
+                <button type="submit" class="btn btn-success btn-block"><i class="fas fa-paper-plane"></i> Submit
+                    Application</button>
+            </form>
+        </div>
+        {% endif %}
+
+        <a href="{{ url_for('browse_jobs') }}" style="display:block; text-align:center; margin-top:2rem;">
+            <i class="fas fa-arrow-left"></i> Back to Jobs
+        </a>
+    </div>
+</body>
+
+</html>
