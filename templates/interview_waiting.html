@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Interview Waiting</title>
+    <title>{% if expired %}Interview Expired{% else %}Interview Waiting{% endif %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
@@ -28,12 +28,20 @@
         }
         .waiting-card i.main-icon {
             font-size: 4rem;
-            color: var(--primary);
             margin-bottom: 1.5rem;
+        }
+        .waiting-card i.main-icon.waiting {
+            color: var(--primary);
+        }
+        .waiting-card i.main-icon.expired {
+            color: var(--danger);
         }
         .waiting-card h1 {
             color: var(--dark);
             margin-bottom: 1rem;
+        }
+        .waiting-card h1.expired-title {
+            color: var(--danger);
         }
         .waiting-card p {
             color: var(--gray);
@@ -41,15 +49,39 @@
             font-size: 1.1rem;
         }
         .time-box {
-            background: #e3f2fd;
             padding: 1rem 2rem;
             border-radius: 10px;
             font-weight: 600;
-            color: var(--primary);
             font-size: 1.25rem;
             display: inline-block;
             margin-bottom: 2rem;
+        }
+        .time-box.waiting {
+            background: #e3f2fd;
+            color: var(--primary);
             border: 1px solid rgba(102, 126, 234, 0.2);
+        }
+        .time-box.expired {
+            background: #f8d7da;
+            color: var(--danger);
+            border: 1px solid rgba(220, 53, 69, 0.2);
+        }
+        .expired-notice {
+            background: linear-gradient(135deg, #f8d7da, #f5c6cb);
+            border-left: 4px solid var(--danger);
+            padding: 1.25rem 1.5rem;
+            border-radius: 10px;
+            margin-bottom: 2rem;
+            text-align: left;
+        }
+        .expired-notice h4 {
+            color: #721c24;
+            margin-bottom: 0.5rem;
+        }
+        .expired-notice p {
+            color: #721c24;
+            font-size: 0.95rem;
+            margin: 0;
         }
         .btn-waiting-back {
             background: linear-gradient(135deg, var(--primary), var(--secondary));
@@ -74,13 +106,27 @@
 <body>
     <div class="waiting-container">
         <div class="waiting-card">
-            <i class="fas fa-hourglass-half main-icon"></i>
+            {% if expired %}
+            <i class="fas fa-clock main-icon expired"></i>
+            <h1 class="expired-title">⏰ Time's Up!</h1>
+            <p>The interview window has expired. Access to this interview room is no longer available as the scheduled time has passed by more than 5 hours.</p>
+            <div class="time-box expired">
+                <i class="fas fa-calendar-times"></i> Was scheduled: {{ date }} at {{ time }}
+            </div>
+            <br>
+            <div class="expired-notice">
+                <h4><i class="fas fa-exclamation-triangle"></i> Interview Access Blocked</h4>
+                <p>The interview was not attended within the allowed time window (5 hours from scheduled time). Please contact the recruiter to reschedule if needed.</p>
+            </div>
+            {% else %}
+            <i class="fas fa-hourglass-half main-icon waiting"></i>
             <h1>Too Early!</h1>
             <p>The interview has not started yet. Please wait until the scheduled date and time to join the room.</p>
-            <div class="time-box">
+            <div class="time-box waiting">
                 <i class="fas fa-calendar-alt"></i> {{ date }} at {{ time }}
             </div>
             <br>
+            {% endif %}
             {% if role == 'recruiter' %}
                 <a href="{{ url_for('recruiter_dashboard') }}" class="btn-waiting-back"><i class="fas fa-arrow-left"></i> Back to Dashboard</a>
             {% else %}

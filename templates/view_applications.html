@@ -61,6 +61,7 @@
                     {% elif app.status == 'interviewed' %}INTERVIEWED
                     {% elif app.status == 'hired' %}HIRED
                     {% elif app.status == 'rejected' %}REJECTED
+                    {% elif app.status == 'interview_expired' %}INTERVIEW EXPIRED
                     {% else %}{{ app.status|upper }}{% endif %}
                 </span>
             </div>

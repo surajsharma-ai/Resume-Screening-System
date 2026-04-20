@@ -43,6 +43,7 @@
                         style="color: var(--info);"></i>
                     {% elif app.status == 'interviewed' %}<i class="fas fa-microphone"
                         style="color: var(--secondary);"></i>
+                    {% elif app.status == 'interview_expired' %}<i class="fas fa-clock text-danger"></i>
                     {% else %}<i class="fas fa-clock text-warning"></i>{% endif %}
                 </div>
                 <div class="app-info">
@@ -71,6 +72,11 @@
                     <a href="{{ url_for('answer_questions', app_id=app.id) }}" class="btn btn-primary btn-sm" style="margin-top: 0.5rem; display: inline-block;">
                         <i class="fas fa-clipboard-list"></i> {% if app.status == 'questions_answered' %}Edit Answers{% else %}Answer Questions{% endif %}
                     </a>
+                    {% elif app.status == 'interview_expired' %}
+                    <div class="msg danger">
+                        <i class="fas fa-clock"></i> Interview Window Expired
+                        <br><small>The interview was not attended within 5 hours of the scheduled time.</small>
+                    </div>
                     {% elif app.status == 'interview_scheduled' %}
                     <div class="msg interview-scheduled">
                         <i class="fas fa-calendar-check"></i> Interview Scheduled

@@ -319,10 +319,12 @@ def recruiter_dashboard():
                           (SELECT COUNT(*) FROM applications WHERE job_id=j.id) as app_count
                           FROM jobs j WHERE recruiter_id=? ORDER BY id DESC''', 
                        (session['user_id'],)).fetchall()
+    notif_count = conn.execute('SELECT COUNT(*) FROM notifications WHERE user_id=? AND is_read=0',
+                               (session['user_id'],)).fetchone()[0]
     conn.close()
     
     total_apps = sum(j['app_count'] for j in jobs)
-    return render_template('recruiter_dashboard.html', jobs=jobs, total_apps=total_apps)
+    return render_template('recruiter_dashboard.html', jobs=jobs, total_apps=total_apps, notif_count=notif_count)
 
 @app.route('/recruiter/post-job', methods=['GET', 'POST'])
 def post_job():
@@ -599,16 +601,42 @@ def interview_room(room_id):
         conn.close()
         return redirect(url_for('landing'))
     
-    # Check if interview has started
+    # Check if interview has started or expired
     scheduled_dt_str = f"{interview['scheduled_date']} {interview['scheduled_time']}"
     try:
         scheduled_dt = datetime.strptime(scheduled_dt_str, '%Y-%m-%d %H:%M')
-        if datetime.now() < scheduled_dt:
+        now = datetime.now()
+        
+        # Not yet started
+        if now < scheduled_dt:
             conn.close()
             return render_template('interview_waiting.html', 
                                    date=interview['scheduled_date'], 
                                    time=interview['scheduled_time'],
                                    role=session.get('role'))
+        
+        # Expired: more than 5 hours after scheduled time
+        expiry_dt = scheduled_dt + timedelta(hours=5)
+        if now > expiry_dt and interview['status'] == 'scheduled':
+            # Auto-mark as expired
+            conn.execute('UPDATE interviews SET status=? WHERE id=?', ('expired', interview['id']))
+            conn.execute('UPDATE applications SET status=? WHERE id=?', ('interview_expired', interview['application_id']))
+            conn.commit()
+            conn.close()
+            return render_template('interview_waiting.html',
+                                   date=interview['scheduled_date'],
+                                   time=interview['scheduled_time'],
+                                   role=session.get('role'),
+                                   expired=True)
+        
+        # Already marked as expired
+        if interview['status'] == 'expired':
+            conn.close()
+            return render_template('interview_waiting.html',
+                                   date=interview['scheduled_date'],
+                                   time=interview['scheduled_time'],
+                                   role=session.get('role'),
+                                   expired=True)
     except ValueError:
         pass # Fallback if time format is unexpected
     
@@ -980,7 +1008,48 @@ def notifications():
     conn.commit()
     conn.close()
     
-    return render_template('notifications.html', notifications=notifs)
+    return render_template('notifications.html', notifications=notifs, portal='applicant')
+
+@app.route('/recruiter/notifications')
+def recruiter_notifications():
+    if session.get('role') != 'recruiter':
+        return redirect(url_for('landing'))
+    
+    conn = get_db()
+    notifs = conn.execute('SELECT * FROM notifications WHERE user_id=? ORDER BY id DESC',
+                         (session['user_id'],)).fetchall()
+    conn.execute('UPDATE notifications SET is_read=1 WHERE user_id=?', (session['user_id'],))
+    conn.commit()
+    conn.close()
+    
+    return render_template('notifications.html', notifications=notifs, portal='recruiter')
+
+@app.route('/delete-notification/<int:notif_id>', methods=['POST'])
+def delete_notification(notif_id):
+    if 'user_id' not in session:
+        return jsonify({'success': False})
+    
+    conn = get_db()
+    notif = conn.execute('SELECT * FROM notifications WHERE id=? AND user_id=?',
+                         (notif_id, session['user_id'])).fetchone()
+    if notif:
+        conn.execute('DELETE FROM notifications WHERE id=?', (notif_id,))
+        conn.commit()
+        conn.close()
+        return jsonify({'success': True, 'message': 'Notification deleted'})
+    conn.close()
+    return jsonify({'success': False, 'message': 'Notification not found'})
+
+@app.route('/delete-all-notifications', methods=['POST'])
+def delete_all_notifications():
+    if 'user_id' not in session:
+        return jsonify({'success': False})
+    
+    conn = get_db()
+    conn.execute('DELETE FROM notifications WHERE user_id=?', (session['user_id'],))
+    conn.commit()
+    conn.close()
+    return jsonify({'success': True, 'message': 'All notifications cleared'})
 
 # ==================== RUN ====================
 if __name__ == '__main__':

@@ -1764,3 +1764,124 @@ a {
     border-color: rgba(255, 255, 255, 0.15);
     color: white;
 }
+
+/* ===== NOTIFICATION DELETE BUTTON ===== */
+.notif-delete-btn {
+    background: none;
+    border: none;
+    color: #ccc;
+    font-size: 1.1rem;
+    cursor: pointer;
+    padding: 0.4rem;
+    border-radius: 50%;
+    transition: all 0.2s;
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.notif-delete-btn:hover {
+    background: var(--danger);
+    color: white;
+    transform: scale(1.1);
+}
+
+/* ===== NOTIFICATION PAGE HEADER ===== */
+.notif-page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+}
+
+.notif-page-header h1 {
+    color: var(--primary);
+    margin: 0;
+}
+
+.notif-card.warning {
+    border-left: 4px solid var(--warning);
+}
+
+.notif-card.warning .notif-icon {
+    color: var(--warning);
+}
+
+/* ===== FILE UPLOAD SUCCESS MESSAGE ===== */
+.file-success-msg {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    background: linear-gradient(135deg, #d4edda, #c3e6cb);
+    border: 2px solid var(--success);
+    border-radius: 12px;
+    padding: 1.25rem 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.file-success-icon {
+    font-size: 2.5rem;
+    color: var(--success);
+    flex-shrink: 0;
+}
+
+.file-success-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.file-success-info strong {
+    color: #155724;
+    font-size: 1rem;
+    word-break: break-all;
+}
+
+.file-success-info small {
+    color: #28a745;
+    font-size: 0.85rem;
+}
+
+.file-change-btn {
+    background: transparent;
+    border: 2px solid var(--success);
+    color: var(--success);
+    padding: 0.4rem 1rem;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 0.85rem;
+    flex-shrink: 0;
+}
+
+.file-change-btn:hover {
+    background: var(--success);
+    color: white;
+}
+
+@keyframes fadeSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* ===== INTERVIEW EXPIRED STATUS ===== */
+.status-badge.interview_expired {
+    background: linear-gradient(135deg, #f8d7da, #f5c6cb);
+    color: #721c24;
+    border: 1px solid var(--danger);
+}
+
+.my-app-card.interview_expired {
+    border-left-color: var(--danger);
+}

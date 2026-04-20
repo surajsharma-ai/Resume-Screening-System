@@ -75,16 +75,30 @@
         {% else %}
         <div class="upload-card">
             <h2><i class="fas fa-upload"></i> Upload Resume</h2>
-            <form method="POST" enctype="multipart/form-data">
-                <div class="file-upload">
+            <form method="POST" enctype="multipart/form-data" id="uploadForm">
+                <div class="file-upload" id="fileUploadArea">
                     <input type="file" name="resume" id="resume" accept=".pdf" required>
-                    <label for="resume">
+                    <label for="resume" id="uploadLabel">
                         <i class="fas fa-cloud-upload-alt"></i>
                         <span>Choose file (PDF only)</span>
                     </label>
                 </div>
-                <button type="submit" class="btn btn-success btn-block"><i class="fas fa-paper-plane"></i> Submit
-                    Application</button>
+                <!-- File selected success message -->
+                <div id="fileSuccess" style="display:none;" class="file-success-msg">
+                    <div class="file-success-icon">
+                        <i class="fas fa-check-circle"></i>
+                    </div>
+                    <div class="file-success-info">
+                        <strong id="fileName"></strong>
+                        <small id="fileSize"></small>
+                    </div>
+                    <button type="button" class="file-change-btn" onclick="document.getElementById('resume').click()">
+                        <i class="fas fa-sync-alt"></i> Change
+                    </button>
+                </div>
+                <button type="submit" class="btn btn-success btn-block" id="submitBtn">
+                    <i class="fas fa-paper-plane"></i> Submit Application
+                </button>
             </form>
         </div>
         {% endif %}
@@ -93,6 +107,35 @@
             <i class="fas fa-arrow-left"></i> Back to Jobs
         </a>
     </div>
+
+    <script>
+        document.getElementById('resume').addEventListener('change', function(e) {
+            var file = e.target.files[0];
+            if (file) {
+                var fileSuccess = document.getElementById('fileSuccess');
+                var uploadArea = document.getElementById('fileUploadArea');
+                var fileName = document.getElementById('fileName');
+                var fileSize = document.getElementById('fileSize');
+                
+                // Show file name and size
+                fileName.textContent = file.name;
+                var sizeMB = (file.size / (1024 * 1024)).toFixed(2);
+                fileSize.textContent = sizeMB + ' MB • PDF';
+                
+                // Animate transition
+                uploadArea.style.display = 'none';
+                fileSuccess.style.display = 'flex';
+                fileSuccess.style.animation = 'fadeSlideIn 0.4s ease';
+            }
+        });
+
+        document.getElementById('uploadForm').addEventListener('submit', function() {
+            var btn = document.getElementById('submitBtn');
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Analyzing Resume...';
+            btn.disabled = true;
+            btn.style.opacity = '0.7';
+        });
+    </script>
 </body>
 
 </html>

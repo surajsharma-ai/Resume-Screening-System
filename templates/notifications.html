@@ -9,6 +9,17 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
 <body>
+    {% if portal == 'recruiter' %}
+    <nav class="navbar">
+        <div class="nav-brand"><i class="fas fa-bullseye"></i> AI Resume Screener</div>
+        <div class="nav-links">
+            <a href="{{ url_for('recruiter_dashboard') }}"><i class="fas fa-home"></i> Dashboard</a>
+            <a href="{{ url_for('post_job') }}"><i class="fas fa-plus"></i> Post Job</a>
+            <a href="{{ url_for('recruiter_notifications') }}"><i class="fas fa-bell"></i> Notifications</a>
+            <a href="{{ url_for('logout') }}" class="btn-logout"><i class="fas fa-sign-out-alt"></i> Logout</a>
+        </div>
+    </nav>
+    {% else %}
     <nav class="navbar applicant-nav">
         <div class="nav-brand"><i class="fas fa-bullseye"></i> AI Resume Screener</div>
         <div class="nav-links">
@@ -19,32 +30,84 @@
             <a href="{{ url_for('logout') }}" class="btn-logout"><i class="fas fa-sign-out-alt"></i> Logout</a>
         </div>
     </nav>
+    {% endif %}
 
     <div class="container">
-        <h1><i class="fas fa-bell"></i> Notifications</h1>
+        <div class="notif-page-header">
+            <h1><i class="fas fa-bell"></i> Notifications</h1>
+            {% if notifications %}
+            <button class="btn btn-danger btn-sm" id="clearAllBtn" onclick="clearAllNotifications()">
+                <i class="fas fa-trash-alt"></i> Clear All
+            </button>
+            {% endif %}
+        </div>
 
         {% if notifications %}
-        <div class="notif-list">
+        <div class="notif-list" id="notifList">
             {% for n in notifications %}
-            <div class="notif-card {{ n.type }}">
+            <div class="notif-card {{ n.type }}" id="notif-{{ n.id }}">
                 <div class="notif-icon">
                     {% if n.type == 'success' %}<i class="fas fa-check-circle"></i>
                     {% elif n.type == 'danger' %}<i class="fas fa-times-circle"></i>
+                    {% elif n.type == 'warning' %}<i class="fas fa-exclamation-triangle"></i>
                     {% else %}<i class="fas fa-info-circle"></i>{% endif %}
                 </div>
                 <div class="notif-content">
                     <h4>{{ n.title }}</h4>
                     <p>{{ n.message }}</p>
                 </div>
+                <button class="notif-delete-btn" onclick="deleteNotification({{ n.id }})" title="Delete notification">
+                    <i class="fas fa-times"></i>
+                </button>
             </div>
             {% endfor %}
         </div>
         {% else %}
-        <div class="empty-state">
+        <div class="empty-state" id="emptyState">
             <i class="fas fa-bell-slash"></i>
             <p>No notifications</p>
         </div>
         {% endif %}
     </div>
+
+    <script>
+        function deleteNotification(id) {
+            var card = document.getElementById('notif-' + id);
+            card.style.transition = 'all 0.3s ease';
+            card.style.transform = 'translateX(100%)';
+            card.style.opacity = '0';
+            
+            fetch('/delete-notification/' + id, { method: 'POST' })
+                .then(function(r) { return r.json(); })
+                .then(function(d) {
+                    setTimeout(function() {
+                        card.remove();
+                        // Check if list is now empty
+                        var remaining = document.querySelectorAll('.notif-card');
+                        if (remaining.length === 0) {
+                            document.getElementById('notifList').style.display = 'none';
+                            var clearBtn = document.getElementById('clearAllBtn');
+                            if (clearBtn) clearBtn.style.display = 'none';
+                            var container = document.querySelector('.container');
+                            var empty = document.createElement('div');
+                            empty.className = 'empty-state';
+                            empty.innerHTML = '<i class="fas fa-bell-slash"></i><p>No notifications</p>';
+                            container.appendChild(empty);
+                        }
+                    }, 300);
+                });
+        }
+
+        function clearAllNotifications() {
+            if (!confirm('Delete all notifications? This cannot be undone.')) return;
+            fetch('/delete-all-notifications', { method: 'POST' })
+                .then(function(r) { return r.json(); })
+                .then(function(d) {
+                    if (d.success) {
+                        location.reload();
+                    }
+                });
+        }
+    </script>
 </body>
 </html>

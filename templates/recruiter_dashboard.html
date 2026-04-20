@@ -16,6 +16,7 @@
         <div class="nav-links">
             <a href="{{ url_for('recruiter_dashboard') }}"><i class="fas fa-home"></i> Dashboard</a>
             <a href="{{ url_for('post_job') }}"><i class="fas fa-plus"></i> Post Job</a>
+            <a href="{{ url_for('recruiter_notifications') }}"><i class="fas fa-bell"></i> Notifications{% if notif_count %} <span class="badge">{{ notif_count }}</span>{% endif %}</a>
             <a href="{{ url_for('logout') }}" class="btn-logout"><i class="fas fa-sign-out-alt"></i> Logout</a>
         </div>
         <div class="nav-user"><i class="fas fa-user"></i> {{ session.fullname }}</div>
