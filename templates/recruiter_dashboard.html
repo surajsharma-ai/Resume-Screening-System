@@ -4,10 +4,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Recruiter Dashboard</title>
+    <title>Recruiter Dashboard — Analytics</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 
 <body>
@@ -22,36 +23,318 @@
         <div class="nav-user"><i class="fas fa-user"></i> {{ session.fullname }}</div>
     </nav>
 
-    <div class="container">
+    <div class="analytics-container">
         {% with messages = get_flashed_messages(with_categories=true) %}
         {% for category, message in messages %}
         <div class="alert alert-{{ category }}">{{ message }}</div>
         {% endfor %}
         {% endwith %}
 
-        <div class="dashboard-header">
-            <h1><i class="fas fa-tachometer-alt"></i> Dashboard</h1>
-            <p>Welcome, {{ session.fullname }}!</p>
-        </div>
-
-        <div class="stats-row">
-            <div class="stat-card">
-                <i class="fas fa-briefcase"></i>
-                <div>
-                    <h3>{{ jobs|length }}</h3>
-                    <p>Total Jobs</p>
-                </div>
+        <!-- Dashboard Header + Filter Bar -->
+        <div class="dash-topbar">
+            <div class="dash-title">
+                <h1><i class="fas fa-chart-line"></i> Analytics Dashboard</h1>
+                <p>Welcome back, {{ session.fullname }}! Here's your hiring overview.</p>
             </div>
-            <div class="stat-card">
-                <i class="fas fa-users"></i>
-                <div>
-                    <h3>{{ total_apps }}</h3>
-                    <p>Applications</p>
-                </div>
+            <div class="filter-bar" id="filterBar">
+                <button class="filter-btn active" data-period="all" onclick="filterDashboard('all', this)">All Time</button>
+                <button class="filter-btn" data-period="month" onclick="filterDashboard('month', this)">Last Month</button>
+                <button class="filter-btn" data-period="quarter" onclick="filterDashboard('quarter', this)">Last Quarter</button>
+                <button class="filter-btn" data-period="year" onclick="filterDashboard('year', this)">Last Year</button>
             </div>
         </div>
 
-        <div class="section">
+        <!-- KPI Cards Row -->
+        <div class="kpi-grid" id="kpiGrid">
+            <div class="kpi-card kpi-positions">
+                <div class="kpi-icon"><i class="fas fa-briefcase"></i></div>
+                <div class="kpi-body">
+                    <span class="kpi-value" id="kpiOpenPositions">{{ analytics.open_positions }}</span>
+                    <span class="kpi-label">Open Positions</span>
+                </div>
+                <div class="kpi-glow"></div>
+            </div>
+            <div class="kpi-card kpi-pipeline">
+                <div class="kpi-icon"><i class="fas fa-users"></i></div>
+                <div class="kpi-body">
+                    <span class="kpi-value" id="kpiTotalCandidates">{{ analytics.total_candidates }}</span>
+                    <span class="kpi-label">Total Candidates</span>
+                </div>
+                <div class="kpi-glow"></div>
+            </div>
+            <div class="kpi-card kpi-hires">
+                <div class="kpi-icon"><i class="fas fa-user-check"></i></div>
+                <div class="kpi-body">
+                    <span class="kpi-value" id="kpiHires">{{ analytics.hires_made }}</span>
+                    <span class="kpi-label">Hires Made</span>
+                </div>
+                <div class="kpi-glow"></div>
+            </div>
+            <div class="kpi-card kpi-acceptance">
+                <div class="kpi-icon"><i class="fas fa-handshake"></i></div>
+                <div class="kpi-body">
+                    <span class="kpi-value" id="kpiOfferRate">{{ analytics.offer_acceptance_rate }}%</span>
+                    <span class="kpi-label">Offer Acceptance</span>
+                </div>
+                <div class="kpi-glow"></div>
+            </div>
+            <div class="kpi-card kpi-time">
+                <div class="kpi-icon"><i class="fas fa-clock"></i></div>
+                <div class="kpi-body">
+                    <span class="kpi-value kpi-value-sm" id="kpiAvgTime">{{ analytics.avg_time_to_hire }}</span>
+                    <span class="kpi-label">Avg Time to Hire</span>
+                </div>
+                <div class="kpi-glow"></div>
+            </div>
+            <div class="kpi-card kpi-passrate">
+                <div class="kpi-icon"><i class="fas fa-clipboard-check"></i></div>
+                <div class="kpi-body">
+                    <span class="kpi-value" id="kpiPassRate">{{ analytics.interview_pass_rate }}%</span>
+                    <span class="kpi-label">Interview Pass Rate</span>
+                </div>
+                <div class="kpi-glow"></div>
+            </div>
+        </div>
+
+        <!-- Middle Row: Pipeline Funnel + Hiring Trends -->
+        <div class="analytics-grid">
+            <!-- Pipeline Funnel -->
+            <div class="chart-card">
+                <div class="chart-header">
+                    <h2><i class="fas fa-filter"></i> Hiring Pipeline</h2>
+                    <span class="chart-subtitle">Candidate progression through stages</span>
+                </div>
+                <div class="funnel-section" id="funnelSection">
+                    {% set pipeline = analytics.pipeline %}
+                    {% set rates = analytics.pipeline_rates %}
+                    {% set max_val = [pipeline.applied, 1]|max %}
+                    
+                    <div class="funnel-stage">
+                        <div class="funnel-label">
+                            <span class="funnel-name">Applied</span>
+                            <span class="funnel-count" id="funnelApplied">{{ pipeline.applied }}</span>
+                        </div>
+                        <div class="funnel-bar-track">
+                            <div class="funnel-bar funnel-bar-1" style="width: {{ (pipeline.applied / max_val * 100)|round }}%"></div>
+                        </div>
+                    </div>
+                    <div class="funnel-arrow">
+                        <i class="fas fa-arrow-down"></i>
+                        <span class="funnel-rate" id="rateAppliedScreened">{{ rates.applied_to_screened }}%</span>
+                    </div>
+                    
+                    <div class="funnel-stage">
+                        <div class="funnel-label">
+                            <span class="funnel-name">Screened</span>
+                            <span class="funnel-count" id="funnelScreened">{{ pipeline.screened }}</span>
+                        </div>
+                        <div class="funnel-bar-track">
+                            <div class="funnel-bar funnel-bar-2" style="width: {{ (pipeline.screened / max_val * 100)|round if max_val > 0 else 0 }}%"></div>
+                        </div>
+                    </div>
+                    <div class="funnel-arrow">
+                        <i class="fas fa-arrow-down"></i>
+                        <span class="funnel-rate" id="rateScreenedInterviewed">{{ rates.screened_to_interviewed }}%</span>
+                    </div>
+                    
+                    <div class="funnel-stage">
+                        <div class="funnel-label">
+                            <span class="funnel-name">Interviewed</span>
+                            <span class="funnel-count" id="funnelInterviewed">{{ pipeline.interviewed }}</span>
+                        </div>
+                        <div class="funnel-bar-track">
+                            <div class="funnel-bar funnel-bar-3" style="width: {{ (pipeline.interviewed / max_val * 100)|round if max_val > 0 else 0 }}%"></div>
+                        </div>
+                    </div>
+                    <div class="funnel-arrow">
+                        <i class="fas fa-arrow-down"></i>
+                        <span class="funnel-rate" id="rateInterviewedOffered">{{ rates.interviewed_to_offered }}%</span>
+                    </div>
+                    
+                    <div class="funnel-stage">
+                        <div class="funnel-label">
+                            <span class="funnel-name">Offered</span>
+                            <span class="funnel-count" id="funnelOffered">{{ pipeline.offered }}</span>
+                        </div>
+                        <div class="funnel-bar-track">
+                            <div class="funnel-bar funnel-bar-4" style="width: {{ (pipeline.offered / max_val * 100)|round if max_val > 0 else 0 }}%"></div>
+                        </div>
+                    </div>
+                    <div class="funnel-arrow">
+                        <i class="fas fa-arrow-down"></i>
+                        <span class="funnel-rate" id="rateOfferedHired">{{ rates.offered_to_hired }}%</span>
+                    </div>
+                    
+                    <div class="funnel-stage">
+                        <div class="funnel-label">
+                            <span class="funnel-name">Hired</span>
+                            <span class="funnel-count" id="funnelHired">{{ pipeline.hired }}</span>
+                        </div>
+                        <div class="funnel-bar-track">
+                            <div class="funnel-bar funnel-bar-5" style="width: {{ (pipeline.hired / max_val * 100)|round if max_val > 0 else 0 }}%"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Hiring Trends Chart -->
+            <div class="chart-card">
+                <div class="chart-header">
+                    <h2><i class="fas fa-chart-area"></i> Hiring Trends</h2>
+                    <span class="chart-subtitle">Applications & hires over the last 6 months</span>
+                </div>
+                <div class="chart-canvas-wrap">
+                    <canvas id="trendsChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bottom Row: Role Stats + Alerts -->
+        <div class="analytics-grid">
+            <!-- Role-Based Stats -->
+            <div class="chart-card">
+                <div class="chart-header">
+                    <h2><i class="fas fa-th-list"></i> Role-Based Stats</h2>
+                    <span class="chart-subtitle">Breakdown by job role</span>
+                </div>
+                <div class="role-table-wrap">
+                    {% if analytics.role_stats %}
+                    <table class="role-stats-table" id="roleStatsTable">
+                        <thead>
+                            <tr>
+                                <th>Role</th>
+                                <th>Applicants</th>
+                                <th>In Pipeline</th>
+                                <th>Hires</th>
+                                <th>Fill Rate</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for role in analytics.role_stats %}
+                            <tr>
+                                <td class="role-name">{{ role.title }}</td>
+                                <td><span class="role-badge role-applicants">{{ role.applicants }}</span></td>
+                                <td><span class="role-badge role-pipeline">{{ role.in_pipeline }}</span></td>
+                                <td><span class="role-badge role-hires">{{ role.hires }}</span></td>
+                                <td>
+                                    {% set fill = (role.hires / role.applicants * 100)|round(1) if role.applicants > 0 else 0 %}
+                                    <div class="fill-bar-wrap">
+                                        <div class="fill-bar" style="width: {{ fill }}%"></div>
+                                        <span class="fill-pct">{{ fill }}%</span>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                    {% else %}
+                    <div class="empty-state" style="padding: 2rem;">
+                        <i class="fas fa-inbox"></i>
+                        <p>No job data yet. <a href="{{ url_for('post_job') }}">Post your first job!</a></p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Tasks & Alerts -->
+            <div class="chart-card alerts-card">
+                <div class="chart-header">
+                    <h2><i class="fas fa-exclamation-triangle"></i> Tasks & Alerts</h2>
+                    <span class="chart-subtitle">Items needing your attention</span>
+                </div>
+                <div class="alerts-widget" id="alertsWidget">
+                    {% set alerts = analytics.alerts %}
+                    {% set details = analytics.alert_details %}
+                    
+                    <div class="alert-item {% if alerts.interviews_today > 0 %}alert-hot{% else %}alert-ok{% endif %}">
+                        <div class="alert-icon"><i class="fas fa-calendar-day"></i></div>
+                        <div class="alert-body">
+                            <span class="alert-title">Interviews Today</span>
+                            <span class="alert-count">{{ alerts.interviews_today }}</span>
+                        </div>
+                        {% if details.interviews_today_list %}
+                        <div class="alert-detail-toggle" onclick="toggleAlertDetail(this)"><i class="fas fa-chevron-down"></i></div>
+                        <div class="alert-detail-list">
+                            {% for item in details.interviews_today_list %}
+                            <div class="alert-detail-item">
+                                <span>{{ item.fullname }}</span>
+                                <span class="detail-meta">{{ item.title }} · {{ item.scheduled_time }}</span>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                    </div>
+
+                    <div class="alert-item {% if alerts.interviews_week > 0 %}alert-info{% else %}alert-ok{% endif %}">
+                        <div class="alert-icon"><i class="fas fa-calendar-week"></i></div>
+                        <div class="alert-body">
+                            <span class="alert-title">Interviews This Week</span>
+                            <span class="alert-count">{{ alerts.interviews_week }}</span>
+                        </div>
+                    </div>
+                    
+                    <div class="alert-item {% if alerts.pending_feedback > 0 %}alert-warn{% else %}alert-ok{% endif %}">
+                        <div class="alert-icon"><i class="fas fa-comment-dots"></i></div>
+                        <div class="alert-body">
+                            <span class="alert-title">Pending Feedback</span>
+                            <span class="alert-count">{{ alerts.pending_feedback }}</span>
+                        </div>
+                        {% if details.pending_feedback_list %}
+                        <div class="alert-detail-toggle" onclick="toggleAlertDetail(this)"><i class="fas fa-chevron-down"></i></div>
+                        <div class="alert-detail-list">
+                            {% for item in details.pending_feedback_list %}
+                            <div class="alert-detail-item">
+                                <span>{{ item.fullname }}</span>
+                                <span class="detail-meta">{{ item.title }} · {{ item.scheduled_date }}</span>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                    </div>
+
+                    <div class="alert-item {% if alerts.offers_awaiting > 0 %}alert-warn{% else %}alert-ok{% endif %}">
+                        <div class="alert-icon"><i class="fas fa-file-signature"></i></div>
+                        <div class="alert-body">
+                            <span class="alert-title">Offers Awaiting Decision</span>
+                            <span class="alert-count">{{ alerts.offers_awaiting }}</span>
+                        </div>
+                        {% if details.offers_awaiting_list %}
+                        <div class="alert-detail-toggle" onclick="toggleAlertDetail(this)"><i class="fas fa-chevron-down"></i></div>
+                        <div class="alert-detail-list">
+                            {% for item in details.offers_awaiting_list %}
+                            <div class="alert-detail-item">
+                                <span>{{ item.fullname }}</span>
+                                <span class="detail-meta">{{ item.title }}</span>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                    </div>
+
+                    <div class="alert-item {% if alerts.stuck_candidates > 0 %}alert-hot{% else %}alert-ok{% endif %}">
+                        <div class="alert-icon"><i class="fas fa-hourglass-half"></i></div>
+                        <div class="alert-body">
+                            <span class="alert-title">Candidates Stuck (7+ days)</span>
+                            <span class="alert-count">{{ alerts.stuck_candidates }}</span>
+                        </div>
+                        {% if details.stuck_list %}
+                        <div class="alert-detail-toggle" onclick="toggleAlertDetail(this)"><i class="fas fa-chevron-down"></i></div>
+                        <div class="alert-detail-list">
+                            {% for item in details.stuck_list %}
+                            <div class="alert-detail-item">
+                                <span>{{ item.fullname }}</span>
+                                <span class="detail-meta">{{ item.title }} · {{ item.status }}</span>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Your Jobs Section (preserved) -->
+        <div class="section" style="margin-top: 2rem;">
             <div class="section-header">
                 <h2><i class="fas fa-list"></i> Your Jobs</h2>
                 <a href="{{ url_for('post_job') }}" class="btn btn-primary"><i class="fas fa-plus"></i> Post Job</a>
@@ -91,6 +374,152 @@
     </div>
 
     <script>
+        // ===== CHART: Hiring Trends =====
+        const trendLabels = {{ analytics.trends.labels | tojson }};
+        const trendApps = {{ analytics.trends.applications | tojson }};
+        const trendHires = {{ analytics.trends.hires | tojson }};
+
+        const trendsCtx = document.getElementById('trendsChart').getContext('2d');
+        let trendsChart = new Chart(trendsCtx, {
+            type: 'line',
+            data: {
+                labels: trendLabels,
+                datasets: [
+                    {
+                        label: 'Applications',
+                        data: trendApps,
+                        borderColor: '#667eea',
+                        backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                        fill: true,
+                        tension: 0.4,
+                        borderWidth: 3,
+                        pointBackgroundColor: '#667eea',
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 2,
+                        pointRadius: 5,
+                        pointHoverRadius: 7
+                    },
+                    {
+                        label: 'Hires',
+                        data: trendHires,
+                        borderColor: '#28a745',
+                        backgroundColor: 'rgba(40, 167, 69, 0.1)',
+                        fill: true,
+                        tension: 0.4,
+                        borderWidth: 3,
+                        pointBackgroundColor: '#28a745',
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 2,
+                        pointRadius: 5,
+                        pointHoverRadius: 7
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'top',
+                        labels: { usePointStyle: true, padding: 20, font: { family: 'Poppins', size: 12 } }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: { font: { family: 'Poppins' }, stepSize: 1 },
+                        grid: { color: 'rgba(0,0,0,0.05)' }
+                    },
+                    x: {
+                        ticks: { font: { family: 'Poppins' } },
+                        grid: { display: false }
+                    }
+                },
+                interaction: { intersect: false, mode: 'index' }
+            }
+        });
+
+        // ===== FILTER DASHBOARD =====
+        function filterDashboard(period, btn) {
+            document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+
+            fetch('/recruiter/dashboard-data?period=' + period)
+                .then(r => r.json())
+                .then(d => {
+                    if (!d.success) return;
+                    const a = d.data;
+
+                    // Update KPIs
+                    animateValue('kpiOpenPositions', a.open_positions);
+                    animateValue('kpiTotalCandidates', a.total_candidates);
+                    animateValue('kpiHires', a.hires_made);
+                    document.getElementById('kpiOfferRate').textContent = a.offer_acceptance_rate + '%';
+                    document.getElementById('kpiAvgTime').textContent = a.avg_time_to_hire;
+                    document.getElementById('kpiPassRate').textContent = a.interview_pass_rate + '%';
+
+                    // Update funnel
+                    const p = a.pipeline;
+                    const maxV = Math.max(p.applied, 1);
+                    document.getElementById('funnelApplied').textContent = p.applied;
+                    document.getElementById('funnelScreened').textContent = p.screened;
+                    document.getElementById('funnelInterviewed').textContent = p.interviewed;
+                    document.getElementById('funnelOffered').textContent = p.offered;
+                    document.getElementById('funnelHired').textContent = p.hired;
+
+                    const bars = document.querySelectorAll('.funnel-bar');
+                    const vals = [p.applied, p.screened, p.interviewed, p.offered, p.hired];
+                    bars.forEach((bar, i) => {
+                        bar.style.width = Math.round(vals[i] / maxV * 100) + '%';
+                    });
+
+                    const r2 = a.pipeline_rates;
+                    document.getElementById('rateAppliedScreened').textContent = r2.applied_to_screened + '%';
+                    document.getElementById('rateScreenedInterviewed').textContent = r2.screened_to_interviewed + '%';
+                    document.getElementById('rateInterviewedOffered').textContent = r2.interviewed_to_offered + '%';
+                    document.getElementById('rateOfferedHired').textContent = r2.offered_to_hired + '%';
+
+                    // Update trends chart
+                    trendsChart.data.labels = a.trends.labels;
+                    trendsChart.data.datasets[0].data = a.trends.applications;
+                    trendsChart.data.datasets[1].data = a.trends.hires;
+                    trendsChart.update();
+                });
+        }
+
+        // ===== ANIMATE KPI VALUES =====
+        function animateValue(id, target) {
+            const el = document.getElementById(id);
+            const start = parseInt(el.textContent) || 0;
+            const diff = target - start;
+            const duration = 600;
+            const startTime = performance.now();
+
+            function step(currentTime) {
+                const elapsed = currentTime - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+                const eased = 1 - Math.pow(1 - progress, 3);
+                el.textContent = Math.round(start + diff * eased);
+                if (progress < 1) requestAnimationFrame(step);
+            }
+            requestAnimationFrame(step);
+        }
+
+        // ===== TOGGLE ALERT DETAILS =====
+        function toggleAlertDetail(toggle) {
+            const item = toggle.closest('.alert-item');
+            const list = item.querySelector('.alert-detail-list');
+            const icon = toggle.querySelector('i');
+            if (list.classList.contains('open')) {
+                list.classList.remove('open');
+                icon.classList.replace('fa-chevron-up', 'fa-chevron-down');
+            } else {
+                list.classList.add('open');
+                icon.classList.replace('fa-chevron-down', 'fa-chevron-up');
+            }
+        }
+
+        // ===== DELETE JOB =====
         document.querySelectorAll('.delete-job-btn').forEach(function (btn) {
             btn.addEventListener('click', function () {
                 var jobId = this.getAttribute('data-id');
@@ -99,6 +528,14 @@
                         .then(function (r) { return r.json(); })
                         .then(function (d) { alert(d.message); location.reload(); });
                 }
+            });
+        });
+
+        // ===== ENTRY ANIMATIONS =====
+        document.addEventListener('DOMContentLoaded', function () {
+            const kpis = document.querySelectorAll('.kpi-card');
+            kpis.forEach((card, i) => {
+                card.style.animationDelay = (i * 0.1) + 's';
             });
         });
     </script>

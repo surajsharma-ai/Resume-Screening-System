@@ -67,7 +67,8 @@ def init_db():
             skills TEXT,
             experience INTEGER,
             salary TEXT,
-            status TEXT DEFAULT 'active'
+            status TEXT DEFAULT 'active',
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
         );
         CREATE TABLE IF NOT EXISTS applications (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -81,6 +82,7 @@ def init_db():
             missing_skills TEXT,
             experience INTEGER,
             status TEXT DEFAULT 'pending',
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             UNIQUE(job_id, applicant_id)
         );
         CREATE TABLE IF NOT EXISTS notifications (
@@ -120,6 +122,15 @@ def init_db():
             UNIQUE(application_id, question_id)
         );
     ''')
+    # Migration: add created_at columns to existing tables if missing
+    try:
+        conn.execute("ALTER TABLE applications ADD COLUMN created_at TEXT DEFAULT CURRENT_TIMESTAMP")
+    except Exception:
+        pass
+    try:
+        conn.execute("ALTER TABLE jobs ADD COLUMN created_at TEXT DEFAULT CURRENT_TIMESTAMP")
+    except Exception:
+        pass
     conn.commit()
     conn.close()
 
@@ -309,6 +320,218 @@ def logout():
     return redirect(url_for('landing'))
 
 # -------- RECRUITER PAGES --------
+def _get_dashboard_analytics(recruiter_id, period='all'):
+    """Compute all dashboard analytics for the recruiter."""
+    conn = get_db()
+    today = datetime.now().strftime('%Y-%m-%d')
+    
+    # Date filter
+    date_filter = ''
+    if period == 'month':
+        cutoff = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
+        date_filter = f" AND a.created_at >= '{cutoff}'"
+    elif period == 'quarter':
+        cutoff = (datetime.now() - timedelta(days=90)).strftime('%Y-%m-%d')
+        date_filter = f" AND a.created_at >= '{cutoff}'"
+    elif period == 'year':
+        cutoff = (datetime.now() - timedelta(days=365)).strftime('%Y-%m-%d')
+        date_filter = f" AND a.created_at >= '{cutoff}'"
+    
+    # Get recruiter's job IDs
+    job_rows = conn.execute('SELECT id, title FROM jobs WHERE recruiter_id=?', (recruiter_id,)).fetchall()
+    job_ids = [j['id'] for j in job_rows]
+    
+    if not job_ids:
+        conn.close()
+        return {
+            'open_positions': 0, 'total_candidates': 0, 'hires_made': 0,
+            'offer_acceptance_rate': 0, 'avg_time_to_hire': 'N/A',
+            'interview_pass_rate': 0,
+            'pipeline': {'applied': 0, 'screened': 0, 'interviewed': 0, 'offered': 0, 'hired': 0},
+            'pipeline_rates': {'applied_to_screened': 0, 'screened_to_interviewed': 0, 'interviewed_to_offered': 0, 'offered_to_hired': 0},
+            'role_stats': [], 'trends': {'labels': [], 'applications': [], 'hires': []},
+            'alerts': {'interviews_today': 0, 'interviews_week': 0, 'pending_feedback': 0, 'offers_awaiting': 0, 'stuck_candidates': 0},
+            'alert_details': {'interviews_today_list': [], 'pending_feedback_list': [], 'offers_awaiting_list': [], 'stuck_list': []}
+        }
+    
+    placeholders = ','.join('?' * len(job_ids))
+    
+    # KPI: Open positions
+    open_positions = conn.execute(
+        f'SELECT COUNT(*) FROM jobs WHERE recruiter_id=? AND status=?', 
+        (recruiter_id, 'active')).fetchone()[0]
+    
+    # KPI: Total candidates in pipeline
+    total_candidates = conn.execute(
+        f'SELECT COUNT(*) FROM applications a WHERE a.job_id IN ({placeholders})' + date_filter,
+        job_ids).fetchone()[0]
+    
+    # KPI: Hires made
+    hires_made = conn.execute(
+        f"SELECT COUNT(*) FROM applications a WHERE a.job_id IN ({placeholders}) AND a.status='hired'" + date_filter,
+        job_ids).fetchone()[0]
+    
+    # Pipeline stage counts
+    # Map statuses to pipeline stages
+    all_apps = conn.execute(
+        f'SELECT a.status FROM applications a WHERE a.job_id IN ({placeholders})' + date_filter,
+        job_ids).fetchall()
+    
+    applied = len(all_apps)  # everyone who applied
+    screened = sum(1 for a in all_apps if a['status'] in ('selected', 'questions_answered', 'interview_scheduled', 'interviewed', 'hired'))
+    interviewed = sum(1 for a in all_apps if a['status'] in ('interviewed', 'hired'))
+    offered = sum(1 for a in all_apps if a['status'] in ('interviewed', 'hired'))  # interviewed = offered stage
+    hired = sum(1 for a in all_apps if a['status'] == 'hired')
+    rejected_after_interview = sum(1 for a in all_apps if a['status'] == 'rejected')
+    
+    # Conversion rates
+    def safe_pct(num, den):
+        return round((num / den * 100), 1) if den > 0 else 0
+    
+    pipeline_rates = {
+        'applied_to_screened': safe_pct(screened, applied),
+        'screened_to_interviewed': safe_pct(interviewed, screened),
+        'interviewed_to_offered': safe_pct(offered, interviewed),
+        'offered_to_hired': safe_pct(hired, offered)
+    }
+    
+    # KPI: Offer acceptance rate
+    offer_pool = hired + rejected_after_interview
+    offer_acceptance_rate = safe_pct(hired, offer_pool)
+    
+    # KPI: Interview pass rate
+    total_interviews_done = conn.execute(
+        f"SELECT COUNT(*) FROM interviews WHERE job_id IN ({placeholders}) AND status='completed'",
+        job_ids).fetchone()[0]
+    interviews_passed = interviewed  # those who passed interview
+    interview_pass_rate = safe_pct(interviews_passed, max(total_interviews_done, interviewed, 1))
+    
+    # KPI: Avg time to hire (from created_at to status='hired')
+    hire_times = conn.execute(
+        f"""SELECT a.created_at, i.scheduled_date FROM applications a
+            LEFT JOIN interviews i ON i.application_id = a.id
+            WHERE a.job_id IN ({placeholders}) AND a.status='hired' AND a.created_at IS NOT NULL""",
+        job_ids).fetchall()
+    
+    avg_days = 'N/A'
+    if hire_times:
+        total_days = 0
+        count = 0
+        for ht in hire_times:
+            try:
+                start = datetime.strptime(ht['created_at'][:10], '%Y-%m-%d')
+                end = datetime.strptime(ht['scheduled_date'], '%Y-%m-%d') if ht['scheduled_date'] else datetime.now()
+                total_days += (end - start).days
+                count += 1
+            except (ValueError, TypeError):
+                pass
+        if count > 0:
+            avg_days = f"{round(total_days / count)} days"
+    
+    # Role-based stats
+    role_stats = []
+    for job in job_rows:
+        jid = job['id']
+        r_apps = conn.execute(
+            'SELECT COUNT(*) FROM applications WHERE job_id=?', (jid,)).fetchone()[0]
+        r_hires = conn.execute(
+            "SELECT COUNT(*) FROM applications WHERE job_id=? AND status='hired'", (jid,)).fetchone()[0]
+        r_pipeline = conn.execute(
+            "SELECT COUNT(*) FROM applications WHERE job_id=? AND status NOT IN ('hired','rejected')", (jid,)).fetchone()[0]
+        role_stats.append({
+            'title': job['title'],
+            'applicants': r_apps,
+            'hires': r_hires,
+            'in_pipeline': r_pipeline
+        })
+    role_stats.sort(key=lambda x: x['applicants'], reverse=True)
+    
+    # Hiring trends (last 6 months)
+    trend_labels = []
+    trend_apps = []
+    trend_hires = []
+    for i in range(5, -1, -1):
+        d = datetime.now() - timedelta(days=i * 30)
+        month_start = d.replace(day=1).strftime('%Y-%m-%d')
+        if i > 0:
+            next_d = datetime.now() - timedelta(days=(i - 1) * 30)
+            month_end = next_d.replace(day=1).strftime('%Y-%m-%d')
+        else:
+            month_end = (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d')
+        
+        label = d.strftime('%b %Y')
+        trend_labels.append(label)
+        
+        m_apps = conn.execute(
+            f"SELECT COUNT(*) FROM applications WHERE job_id IN ({placeholders}) AND created_at >= ? AND created_at < ?",
+            job_ids + [month_start, month_end]).fetchone()[0]
+        m_hires = conn.execute(
+            f"SELECT COUNT(*) FROM applications WHERE job_id IN ({placeholders}) AND status='hired' AND created_at >= ? AND created_at < ?",
+            job_ids + [month_start, month_end]).fetchone()[0]
+        trend_apps.append(m_apps)
+        trend_hires.append(m_hires)
+    
+    # Alerts
+    week_end = (datetime.now() + timedelta(days=7)).strftime('%Y-%m-%d')
+    
+    interviews_today_list = conn.execute(
+        f"""SELECT i.*, j.title, u.fullname FROM interviews i
+            JOIN jobs j ON i.job_id=j.id JOIN users u ON i.applicant_id=u.id
+            WHERE i.recruiter_id=? AND i.scheduled_date=? AND i.status='scheduled'""",
+        (recruiter_id, today)).fetchall()
+    
+    interviews_week = conn.execute(
+        f"""SELECT COUNT(*) FROM interviews
+            WHERE recruiter_id=? AND scheduled_date >= ? AND scheduled_date <= ? AND status='scheduled'""",
+        (recruiter_id, today, week_end)).fetchone()[0]
+    
+    pending_feedback_list = conn.execute(
+        f"""SELECT i.*, j.title, u.fullname FROM interviews i
+            JOIN jobs j ON i.job_id=j.id JOIN users u ON i.applicant_id=u.id
+            WHERE i.recruiter_id=? AND i.status='scheduled' AND i.scheduled_date < ?""",
+        (recruiter_id, today)).fetchall()
+    
+    offers_awaiting_list = conn.execute(
+        f"""SELECT a.id, a.status, j.title, u.fullname FROM applications a
+            JOIN jobs j ON a.job_id=j.id JOIN users u ON a.applicant_id=u.id
+            WHERE a.job_id IN ({placeholders}) AND a.status='interviewed'""",
+        job_ids).fetchall()
+    
+    stuck_list = conn.execute(
+        f"""SELECT a.id, a.status, a.created_at, j.title, u.fullname FROM applications a
+            JOIN jobs j ON a.job_id=j.id JOIN users u ON a.applicant_id=u.id
+            WHERE a.job_id IN ({placeholders}) AND a.status IN ('pending','selected','questions_answered')
+            AND a.created_at IS NOT NULL AND a.created_at < ?""",
+        job_ids + [(datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')]).fetchall()
+    
+    conn.close()
+    
+    return {
+        'open_positions': open_positions,
+        'total_candidates': total_candidates,
+        'hires_made': hires_made,
+        'offer_acceptance_rate': offer_acceptance_rate,
+        'avg_time_to_hire': avg_days,
+        'interview_pass_rate': interview_pass_rate,
+        'pipeline': {'applied': applied, 'screened': screened, 'interviewed': interviewed, 'offered': offered, 'hired': hired},
+        'pipeline_rates': pipeline_rates,
+        'role_stats': role_stats,
+        'trends': {'labels': trend_labels, 'applications': trend_apps, 'hires': trend_hires},
+        'alerts': {
+            'interviews_today': len(interviews_today_list),
+            'interviews_week': interviews_week,
+            'pending_feedback': len(pending_feedback_list),
+            'offers_awaiting': len(offers_awaiting_list),
+            'stuck_candidates': len(stuck_list)
+        },
+        'alert_details': {
+            'interviews_today_list': [dict(r) for r in interviews_today_list],
+            'pending_feedback_list': [dict(r) for r in pending_feedback_list],
+            'offers_awaiting_list': [dict(r) for r in offers_awaiting_list],
+            'stuck_list': [dict(r) for r in stuck_list]
+        }
+    }
+
 @app.route('/recruiter/dashboard')
 def recruiter_dashboard():
     if session.get('role') != 'recruiter':
@@ -324,7 +547,19 @@ def recruiter_dashboard():
     conn.close()
     
     total_apps = sum(j['app_count'] for j in jobs)
-    return render_template('recruiter_dashboard.html', jobs=jobs, total_apps=total_apps, notif_count=notif_count)
+    analytics = _get_dashboard_analytics(session['user_id'])
+    
+    return render_template('recruiter_dashboard.html', jobs=jobs, total_apps=total_apps, 
+                           notif_count=notif_count, analytics=analytics)
+
+@app.route('/recruiter/dashboard-data')
+def recruiter_dashboard_data():
+    """API endpoint for filtered dashboard data (AJAX)."""
+    if session.get('role') != 'recruiter':
+        return jsonify({'success': False})
+    period = request.args.get('period', 'all')
+    analytics = _get_dashboard_analytics(session['user_id'], period)
+    return jsonify({'success': True, 'data': analytics})
 
 @app.route('/recruiter/post-job', methods=['GET', 'POST'])
 def post_job():
