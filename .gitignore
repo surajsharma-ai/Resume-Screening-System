@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+
+# Virtual Environment
+venv/
+env/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Database (optional - uncomment if you don't want to track db)
+# data/*.db
+
+# Uploads
+uploads/
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# Environment Variables
+.env
