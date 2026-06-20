@@ -52,6 +52,13 @@ Pending → Selected → Questions Answered → Interview Scheduled → Intervie
 - Delete individual or all notifications
 - Triggers on: selection, rejection, interview scheduling, rescheduling, feedback, and hiring
 
+### 📧 Email Integration
+- **SMTP-based email delivery** at every pipeline stage (selection, rejection, interview scheduling, rescheduling, feedback, hiring)
+- **Branded HTML email templates** with responsive design
+- **Async sending** via background threads (non-blocking)
+- **Configurable** via environment variables (Gmail, Outlook, custom SMTP)
+- **Opt-in by default** — set `EMAIL_ENABLED=true` to activate
+
 ---
 
 ## 🛠️ Tech Stack
@@ -66,6 +73,7 @@ Pending → Selected → Questions Answered → Interview Scheduled → Intervie
 | **Security** | bcrypt (password hashing) |
 | **File Parsing** | PyPDF2 (PDF extraction) |
 | **PDF Generation** | FPDF |
+| **Email** | SMTP (smtplib), HTML templates |
 
 ---
 
@@ -105,6 +113,15 @@ Pending → Selected → Questions Answered → Interview Scheduled → Intervie
    http://127.0.0.1:5000
    ```
 
+### Email Setup (Optional)
+To enable email notifications, open `email_service.py` and fill in your Gmail credentials:
+```python
+'SMTP_USERNAME': 'your-email@gmail.com',
+'SMTP_PASSWORD': 'your-app-password',    # Gmail App Password
+'SENDER_EMAIL': 'your-email@gmail.com',
+```
+> **Gmail users**: Use an [App Password](https://support.google.com/accounts/answer/185833), not your regular password.
+
 ### Quick Demo Setup (Optional)
 Seed sample data with a demo recruiter account:
 ```bash
@@ -119,6 +136,7 @@ Login with: **Username:** `demo_recruiter` | **Password:** `password`
 ```
 Resume-Screening-System/
 ├── app.py                      # Main Flask application (all routes & logic)
+├── email_service.py            # SMTP email service with HTML templates
 ├── seed_demo.py                # Demo data seeder script
 ├── data/
 │   └── resume.db               # SQLite database (auto-created)

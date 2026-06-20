@@ -49,6 +49,15 @@ This document provides a complete, step-by-step technical and functional breakdo
     3.  **Real-Time Retrieval:** The next time that user (applicant or recruiter) refreshes their dashboard or clicks the Notifications tab, the system queries the database (`SELECT * FROM notifications WHERE user_id=? AND is_read=0`) and displays the alert in the portal, creating a seamless, automated, two-way communication loop without relying on external emails.
     4.  **Rescheduling Notifications:** If a recruiter changes the time, the backend dynamically alerts the applicant of the new date, and simultaneously sends a confirmation receipt to the recruiter's portal.
 
+### H. Email Integration (SMTP)
+*   **Feature:** Sends real HTML emails to candidates and recruiters at every pipeline stage — selection, rejection, interview scheduling, rescheduling, interview completion, hiring, and screening question submissions.
+*   **Working Logic:**
+    1.  **Modular Architecture:** A dedicated `email_service.py` module encapsulates all email logic, keeping it cleanly separated from the main application.
+    2.  **HTML Email Templates:** Each pipeline event has a branded, responsive HTML email template built using inline CSS for maximum email client compatibility.
+    3.  **Async (Non-Blocking) Sending:** Emails are dispatched in background threads (`threading.Thread`) so the user's HTTP request completes instantly without waiting for SMTP round-trips.
+    4.  **Configuration:** SMTP credentials are loaded from environment variables (`SMTP_SERVER`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `EMAIL_ENABLED`). The feature is disabled by default and activates only when configured, so the app works perfectly without email setup.
+    5.  **Integration Points:** After every `INSERT INTO notifications` in `app.py`, a corresponding `send_*_email()` function is called to deliver the same information via email.
+
 ### G. Virtual Interview Room & Live Camera Access
 *   **Feature:** A dedicated URL and UI space for the actual interview, featuring live hardware integration.
 *   **Working Logic:** 
@@ -99,6 +108,8 @@ If faculty asks: **"Show me how your project works from start to finish?"**, dem
     *   *Answer:* "We do not store plain-text passwords. We use `bcrypt` which uses mathematical salting and hashing. Even if the database was compromised, the passwords are functionally mathematically impossible to decrypt."
 *   **Q: What happens if an applicant uploads a corrupted file type?**
     *   *Answer:* "The backend has error handling inside `extract_text_from_file()`. If `PyPDF2` fails to read it, the system safely falls back to returning empty text alerting the user, rather than explicitly crashing the web app."
+*   **Q: Why send emails asynchronously instead of synchronously?**
+    *   *Answer:* "SMTP network calls can take 2-5 seconds. If we sent emails synchronously, the recruiter would wait for the email server to respond before seeing the 'success' message. By using Python's `threading` module, we fire the email in a background thread so the HTTP response returns instantly, and the email is delivered silently in the background."
 
 ---
 
@@ -108,6 +119,6 @@ If the faculty asks: **"What could be the future enhancements for this project?"
 
 1.  **Deep Learning / Transformer Models:** Upgrading the current TF-IDF keyword vectorization engine to a more advanced Transformer-based NLP model (like BERT or OpenAI APIs) to understand the semantic nuances of a resume with even higher accuracy.
 2.  **Live Video Analytics:** Implementing Real-time Emotion Detection or Speech-to-Text transcription during the live WebRTC video interview to provide the recruiter with automated AI insights on candidate confidence and communication skills.
-3.  **External Third-Party Notifications:** Integrating SMS (via Twilio) or external email support (via SendGrid/SMTP) to instantly push database alerts directly to the user's phone or email inbox for immediate interview updates.
-4.  **Recruiter Analytics Dashboard:** Adding a specialized dashboard utilizing charting libraries (like `Chart.js`) to display visual metrics—such as application drop-off rates, average time-to-hire, and keyword popularity over time.
+3.  ~~**External Third-Party Notifications:**~~ ✅ **Completed** — SMTP email integration is now built-in with branded HTML templates at every pipeline stage.
+4.  **SMS Notifications:** Extending the notification system to include SMS alerts via Twilio for instant mobile notifications.
 5.  **Automated Background Checks & Integrations:** Building API hooks to allow the platform to automatically export finalized hiring data into larger corporate ERP/HR systems (like Workday) or perform automated LinkedIn profile scraping to verify resume claims.

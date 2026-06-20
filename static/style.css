@@ -2482,3 +2482,68 @@ a {
         text-align: center;
     }
 }
+
+/* ===== GOOGLE AUTH BUTTON ===== */
+.divider {
+    display: flex;
+    align-items: center;
+    text-align: center;
+    margin: 1.5rem 0;
+    color: var(--gray);
+    font-size: 0.9rem;
+}
+
+.divider::before,
+.divider::after {
+    content: '';
+    flex: 1;
+    border-bottom: 1px solid #ddd;
+}
+
+.divider span {
+    padding: 0 10px;
+}
+
+.btn-google {
+    background-color: #fff;
+    color: #333;
+    border: 1px solid #ccc;
+    font-weight: 500;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 10px;
+}
+
+.btn-google:hover {
+    background-color: #f8f9fa;
+    color: #333;
+    border-color: #bbb;
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(0,0,0,0.05);
+}
+
+.btn-google i {
+    color: #DB4437; /* Google Red */
+    font-size: 1.2rem;
+}
+
+/* ===== DANGER ZONE ===== */
+.danger-zone {
+    border: 1px solid #ff4d4d;
+    background-color: #ffe6e6;
+    padding: 1.5rem;
+    border-radius: 10px;
+    margin-top: 2rem;
+}
+
+.danger-zone h3 {
+    color: #d93025;
+    margin-bottom: 0.5rem;
+}
+
+.danger-zone p {
+    color: #5f2a2a;
+    margin-bottom: 1rem;
+    font-size: 0.95rem;
+}

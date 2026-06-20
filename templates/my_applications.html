@@ -85,10 +85,22 @@
                         {% endif %}
                     </div>
                     {% if app.interview_room_id %}
-                    <a href="{{ url_for('interview_room', room_id=app.interview_room_id) }}"
-                        class="btn btn-interview btn-sm" style="margin-top: 0.5rem;">
-                        <i class="fas fa-video"></i> Join Interview
-                    </a>
+                        {% if app.interview_type == 'virtual' or not app.interview_type %}
+                            <a href="{{ url_for('interview_room', room_id=app.interview_room_id) }}"
+                                class="btn btn-interview btn-sm" style="margin-top: 0.5rem;">
+                                <i class="fas fa-video"></i> Join Interview
+                            </a>
+                        {% else %}
+                            <div class="msg info" style="margin-top: 0.5rem; display: flex; flex-direction: column; align-items: flex-start; gap: 0.25rem;">
+                                <span><i class="fas fa-map-marker-alt"></i> <strong>Location:</strong> {{ app.location }}</span>
+                            </div>
+                        {% endif %}
+                        
+                        {% if app.additional_instructions %}
+                            <div class="msg" style="margin-top: 0.5rem; background: #fff3cd; color: #856404; font-size: 0.85rem; padding: 0.5rem; border-radius: 4px; border-left: 3px solid #ffc107;">
+                                <strong>Instructions:</strong> {{ app.additional_instructions }}
+                            </div>
+                        {% endif %}
                     {% endif %}
                     {% elif app.status == 'interviewed' %}
                     <div class="msg info"><i class="fas fa-microphone"></i> Interview Completed – Results Pending</div>

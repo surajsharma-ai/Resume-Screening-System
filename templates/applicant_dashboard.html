@@ -51,6 +51,14 @@
                 {% if notif_count > 0 %}<span class="badge">{{ notif_count }} new</span>{% endif %}
             </a>
         </div>
+        
+        <div class="danger-zone">
+            <h3><i class="fas fa-exclamation-triangle"></i> Danger Zone</h3>
+            <p>Once you delete your account, there is no going back. Please be certain.</p>
+            <form action="{{ url_for('delete_account') }}" method="POST" onsubmit="return confirm('Are you sure you want to permanently delete your account and all associated data? This action cannot be undone.');">
+                <button type="submit" class="btn btn-delete"><i class="fas fa-trash-alt"></i> Delete Account</button>
+            </form>
+        </div>
     </div>
 </body>
 </html>

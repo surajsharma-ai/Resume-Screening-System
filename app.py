@@ -2,12 +2,21 @@
 AI Resume Screening System - Complete Flask Application
 """
 
+# Email integration
+from email_service import (
+    send_selection_email, send_rejection_email, send_interview_scheduled_email,
+    send_interview_rescheduled_email, send_interview_completed_email,
+    send_hired_email, send_questions_answered_email
+)
+
 from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify, send_file
 from werkzeug.utils import secure_filename
 import sqlite3
 import json
 import re
 import os
+from dotenv import load_dotenv
+load_dotenv()
 import uuid
 from datetime import datetime, timedelta
 from io import BytesIO
@@ -15,10 +24,22 @@ from fpdf import FPDF
 import bcrypt
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+from authlib.integrations.flask_client import OAuth
 
 # ==================== CONFIGURATION ====================
+os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 app = Flask(__name__)
 app.secret_key = 'your-secret-key-12345'
+
+# OAuth setup
+oauth = OAuth(app)
+google = oauth.register(
+    name='google',
+    client_id=os.environ.get('GOOGLE_CLIENT_ID', ''),
+    client_secret=os.environ.get('GOOGLE_CLIENT_SECRET', ''),
+    server_metadata_url='https://accounts.google.com/.well-known/openid-configuration',
+    client_kwargs={'scope': 'openid email profile'}
+)
 
 DATABASE = 'data/resume.db'
 UPLOAD_FOLDER = 'uploads'
@@ -45,6 +66,14 @@ def get_db():
 
 def init_db():
     conn = get_db()
+    # Migration for existing DB
+    try:
+        conn.execute('ALTER TABLE users ADD COLUMN auth_provider TEXT DEFAULT "local"')
+        conn.execute('ALTER TABLE users ADD COLUMN oauth_id TEXT')
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass # Columns already exist
+
     conn.executescript('''
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -54,7 +83,9 @@ def init_db():
             fullname TEXT,
             phone TEXT,
             role TEXT,
-            company TEXT
+            company TEXT,
+            auth_provider TEXT DEFAULT 'local',
+            oauth_id TEXT
         );
         CREATE TABLE IF NOT EXISTS jobs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -110,6 +141,9 @@ def init_db():
             duration_minutes INTEGER DEFAULT 30,
             room_id TEXT UNIQUE,
             status TEXT DEFAULT 'scheduled',
+            interview_type TEXT DEFAULT 'virtual',
+            location TEXT,
+            additional_instructions TEXT,
             notes TEXT,
             rating INTEGER
         );
@@ -129,6 +163,19 @@ def init_db():
         pass
     try:
         conn.execute("ALTER TABLE jobs ADD COLUMN created_at TEXT DEFAULT CURRENT_TIMESTAMP")
+    except Exception:
+        pass
+    # Migration: add interview_type, location, additional_instructions to interviews
+    try:
+        conn.execute("ALTER TABLE interviews ADD COLUMN interview_type TEXT DEFAULT 'virtual'")
+    except Exception:
+        pass
+    try:
+        conn.execute("ALTER TABLE interviews ADD COLUMN location TEXT")
+    except Exception:
+        pass
+    try:
+        conn.execute("ALTER TABLE interviews ADD COLUMN additional_instructions TEXT")
     except Exception:
         pass
     conn.commit()
@@ -312,6 +359,142 @@ def applicant_register():
         except sqlite3.IntegrityError:
             flash('Username already exists', 'danger')
     return render_template('applicant_register.html')
+
+# -------- GOOGLE OAUTH ROUTES --------
+@app.route('/login/google/<role>')
+def login_google(role):
+    if role not in ['recruiter', 'applicant']:
+        flash('Invalid role specified for Google Login.', 'danger')
+        return redirect(url_for('landing'))
+    
+    # Store the intended role in session to use it after callback
+    session['google_login_role'] = role
+    redirect_uri = url_for('auth_google_callback', _external=True)
+    return google.authorize_redirect(redirect_uri)
+
+@app.route('/auth/google/callback')
+def auth_google_callback():
+    token = google.authorize_access_token()
+    user_info = token.get('userinfo')
+    
+    if not user_info:
+        flash('Google Login failed.', 'danger')
+        return redirect(url_for('landing'))
+        
+    email = user_info.get('email')
+    fullname = user_info.get('name')
+    google_id = user_info.get('sub')
+    
+    role = session.pop('google_login_role', 'applicant')
+    
+    conn = get_db()
+    
+    # Check if user exists by google_id or email
+    user = conn.execute('SELECT * FROM users WHERE oauth_id = ? OR email = ?', (google_id, email)).fetchone()
+    
+    if user:
+        # Existing user
+        # Check if they are logging in with the correct role
+        if user['role'] != role:
+            flash(f'Account exists, but as a {user["role"]}. Please login with correct role.', 'warning')
+            conn.close()
+            return redirect(url_for(f'{user["role"]}_login'))
+            
+        # Update oauth_id if it was missing (e.g., they previously signed up with local email)
+        if not user['oauth_id']:
+            conn.execute('UPDATE users SET oauth_id = ?, auth_provider = "google" WHERE id = ?', (google_id, user['id']))
+            conn.commit()
+            
+        session['user_id'] = user['id']
+        session['username'] = user['username']
+        session['role'] = user['role']
+        conn.close()
+        
+        if role == 'recruiter':
+            return redirect(url_for('recruiter_dashboard'))
+        else:
+            return redirect(url_for('applicant_dashboard'))
+            
+    else:
+        # New user
+        # Generate a unique username from email
+        base_username = email.split('@')[0]
+        username = base_username
+        
+        # Ensure username is unique
+        counter = 1
+        while conn.execute('SELECT id FROM users WHERE username = ?', (username,)).fetchone():
+            username = f"{base_username}{counter}"
+            counter += 1
+            
+        try:
+            conn.execute('''
+                INSERT INTO users (username, email, fullname, role, auth_provider, oauth_id)
+                VALUES (?, ?, ?, ?, "google", ?)
+            ''', (username, email, fullname, role, google_id))
+            conn.commit()
+            
+            # Fetch the newly created user to log them in
+            new_user = conn.execute('SELECT * FROM users WHERE username = ?', (username,)).fetchone()
+            session['user_id'] = new_user['id']
+            session['username'] = new_user['username']
+            session['role'] = new_user['role']
+            conn.close()
+            
+            flash('Successfully registered with Google!', 'success')
+            if role == 'recruiter':
+                return redirect(url_for('recruiter_dashboard'))
+            else:
+                return redirect(url_for('applicant_dashboard'))
+                
+        except sqlite3.IntegrityError:
+            conn.close()
+            flash('Failed to register via Google.', 'danger')
+            return redirect(url_for(f'{role}_login'))
+
+@app.route('/delete-account', methods=['POST'])
+def delete_account():
+    if 'user_id' not in session:
+        return redirect(url_for('landing'))
+        
+    user_id = session['user_id']
+    role = session['role']
+    conn = get_db()
+    
+    if role == 'applicant':
+        # Delete applicant's interviews and responses
+        conn.execute('DELETE FROM interview_responses WHERE applicant_id = ?', (user_id,))
+        conn.execute('DELETE FROM interviews WHERE applicant_id = ?', (user_id,))
+        # Delete applications
+        conn.execute('DELETE FROM applications WHERE applicant_id = ?', (user_id,))
+        
+    elif role == 'recruiter':
+        # Find all jobs posted by the recruiter
+        jobs = conn.execute('SELECT id FROM jobs WHERE recruiter_id = ?', (user_id,)).fetchall()
+        for job in jobs:
+            job_id = job['id']
+            # For each job, delete applications, interview questions, interviews
+            apps = conn.execute('SELECT id FROM applications WHERE job_id = ?', (job_id,)).fetchall()
+            for app in apps:
+                conn.execute('DELETE FROM interview_responses WHERE application_id = ?', (app['id'],))
+            conn.execute('DELETE FROM interviews WHERE job_id = ?', (job_id,))
+            conn.execute('DELETE FROM interview_questions WHERE job_id = ?', (job_id,))
+            conn.execute('DELETE FROM applications WHERE job_id = ?', (job_id,))
+            
+        # Delete jobs
+        conn.execute('DELETE FROM jobs WHERE recruiter_id = ?', (user_id,))
+        
+    # Delete notifications for the user
+    conn.execute('DELETE FROM notifications WHERE user_id = ?', (user_id,))
+    # Finally, delete the user
+    conn.execute('DELETE FROM users WHERE id = ?', (user_id,))
+    
+    conn.commit()
+    conn.close()
+    
+    session.clear()
+    flash('Your account and all associated data have been permanently deleted.', 'info')
+    return redirect(url_for('landing'))
 
 @app.route('/logout')
 def logout():
@@ -731,11 +914,14 @@ def select_next_round(app_id):
     if application:
         conn.execute('UPDATE applications SET status=? WHERE id=?', ('selected', app_id))
         job = conn.execute('SELECT title, company FROM jobs WHERE id=?', (application['job_id'],)).fetchone()
+        applicant = conn.execute('SELECT fullname, email FROM users WHERE id=?', (application['applicant_id'],)).fetchone()
         conn.execute('''INSERT INTO notifications (user_id, title, message, type)
                        VALUES (?, ?, ?, ?)''',
                     (application['applicant_id'], '🎉 Selected for Next Round!',
                      f'Congratulations! You have been selected for the next round for {job["title"]} at {job["company"]}. Please check your applications dashboard to answer the screening questions.', 'success'))
         conn.commit()
+        # Send email
+        send_selection_email(applicant['email'], applicant['fullname'], job['title'], job['company'])
     conn.close()
     return jsonify({'success': True, 'message': 'Candidate selected for next round! Notification sent.'})
 
@@ -749,11 +935,14 @@ def reject(app_id):
     if application:
         conn.execute('UPDATE applications SET status=? WHERE id=?', ('rejected', app_id))
         job = conn.execute('SELECT title, company FROM jobs WHERE id=?', (application['job_id'],)).fetchone()
+        applicant = conn.execute('SELECT fullname, email FROM users WHERE id=?', (application['applicant_id'],)).fetchone()
         conn.execute('''INSERT INTO notifications (user_id, title, message, type)
                        VALUES (?, ?, ?, ?)''',
                     (application['applicant_id'], 'Application Update',
                      f'Thank you for applying to {job["title"]}. We have decided to proceed with other candidates.', 'danger'))
         conn.commit()
+        # Send email
+        send_rejection_email(applicant['email'], applicant['fullname'], job['title'], job['company'])
     conn.close()
     return jsonify({'success': True, 'message': 'Candidate rejected. Notification sent.'})
 
@@ -806,21 +995,33 @@ def schedule_interview(app_id):
     scheduled_date = request.form.get('date')
     scheduled_time = request.form.get('time')
     duration = int(request.form.get('duration', 30))
+    interview_type = request.form.get('interview_type', 'virtual')
+    location = request.form.get('location', '')
+    additional_instructions = request.form.get('additional_instructions', '')
     room_id = str(uuid.uuid4())[:8]
     
     conn.execute('''INSERT INTO interviews 
-                    (application_id, job_id, applicant_id, recruiter_id, scheduled_date, scheduled_time, duration_minutes, room_id)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+                    (application_id, job_id, applicant_id, recruiter_id, scheduled_date, scheduled_time, duration_minutes, room_id, interview_type, location, additional_instructions)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
                 (app_id, application['job_id'], application['applicant_id'],
-                 session['user_id'], scheduled_date, scheduled_time, duration, room_id))
+                 session['user_id'], scheduled_date, scheduled_time, duration, room_id, interview_type, location, additional_instructions))
     conn.execute('UPDATE applications SET status=? WHERE id=?', ('interview_scheduled', app_id))
     
     job = conn.execute('SELECT title, company FROM jobs WHERE id=?', (application['job_id'],)).fetchone()
+    applicant = conn.execute('SELECT fullname, email FROM users WHERE id=?', (application['applicant_id'],)).fetchone()
+    
+    notif_msg = f'Your interview for {job["title"]} at {job["company"]} is scheduled on {scheduled_date} at {scheduled_time}.'
+    if interview_type == 'virtual':
+        notif_msg += ' Check your applications to join the virtual interview room.'
+    else:
+        notif_msg += f' Location: {location}.'
+        
     conn.execute('''INSERT INTO notifications (user_id, title, message, type)
                    VALUES (?, ?, ?, ?)''',
-                (application['applicant_id'], '📅 Interview Scheduled!',
-                 f'Your interview for {job["title"]} at {job["company"]} is scheduled on {scheduled_date} at {scheduled_time}. Check your applications to join the interview room.', 'info'))
+                (application['applicant_id'], '📅 Interview Scheduled!', notif_msg, 'info'))
     conn.commit()
+    # Send email
+    send_interview_scheduled_email(applicant['email'], applicant['fullname'], job['title'], job['company'], scheduled_date, scheduled_time, interview_type, location, additional_instructions)
     conn.close()
     return jsonify({'success': True, 'message': f'Interview scheduled for {scheduled_date} at {scheduled_time}!'})
 
@@ -918,11 +1119,14 @@ def interview_feedback(interview_id):
                     ('interviewed', interview['application_id']))
         
         job = conn.execute('SELECT title, company FROM jobs WHERE id=?', (interview['job_id'],)).fetchone()
+        applicant = conn.execute('SELECT fullname, email FROM users WHERE id=?', (interview['applicant_id'],)).fetchone()
         conn.execute('''INSERT INTO notifications (user_id, title, message, type)
                        VALUES (?, ?, ?, ?)''',
                     (interview['applicant_id'], '🎤 Interview Completed',
                      f'Your interview for {job["title"]} at {job["company"]} has been completed. Results will be shared soon.', 'info'))
         conn.commit()
+        # Send email
+        send_interview_completed_email(applicant['email'], applicant['fullname'], job['title'], job['company'])
     conn.close()
     return jsonify({'success': True, 'message': 'Feedback saved successfully!'})
 
@@ -936,11 +1140,14 @@ def final_hire(app_id):
     if application:
         conn.execute('UPDATE applications SET status=? WHERE id=?', ('hired', app_id))
         job = conn.execute('SELECT title, company FROM jobs WHERE id=?', (application['job_id'],)).fetchone()
+        applicant = conn.execute('SELECT fullname, email FROM users WHERE id=?', (application['applicant_id'],)).fetchone()
         conn.execute('''INSERT INTO notifications (user_id, title, message, type)
                        VALUES (?, ?, ?, ?)''',
                     (application['applicant_id'], '🎉 Congratulations! You are HIRED!',
                      f'You have been officially hired for {job["title"]} at {job["company"]}! Welcome aboard!', 'success'))
         conn.commit()
+        # Send email
+        send_hired_email(applicant['email'], applicant['fullname'], job['title'], job['company'])
     conn.close()
     return jsonify({'success': True, 'message': 'Candidate hired! Notification sent.'})
 
@@ -963,6 +1170,9 @@ def get_interview_info(app_id):
             'time': interview['scheduled_time'],
             'duration': interview['duration_minutes'],
             'status': interview['status'],
+            'interview_type': interview['interview_type'] if 'interview_type' in interview.keys() and interview['interview_type'] else 'virtual',
+            'location': interview['location'] if 'location' in interview.keys() and interview['location'] else '',
+            'additional_instructions': interview['additional_instructions'] if 'additional_instructions' in interview.keys() and interview['additional_instructions'] else '',
             'notes': interview['notes'] or '',
             'rating': interview['rating'] or 0
         })
@@ -1093,7 +1303,7 @@ def my_applications():
     # LEFT JOIN interviews to get interview details
     apps = conn.execute('''SELECT a.*, j.title, j.company,
                           i.scheduled_date as interview_date, i.scheduled_time as interview_time,
-                          i.room_id as interview_room_id
+                          i.room_id as interview_room_id, i.interview_type, i.location, i.additional_instructions
                           FROM applications a
                           INNER JOIN jobs j ON a.job_id=j.id
                           LEFT JOIN interviews i ON i.application_id=a.id
@@ -1165,12 +1375,15 @@ def answer_questions(app_id):
         
         # Notify the recruiter
         applicant = conn.execute('SELECT fullname FROM users WHERE id=?', (session['user_id'],)).fetchone()
+        recruiter = conn.execute('SELECT fullname, email FROM users WHERE id=?', (job['recruiter_id'],)).fetchone()
         conn.execute('''INSERT INTO notifications (user_id, title, message, type)
                        VALUES (?, ?, ?, ?)''',
                     (job['recruiter_id'], 'Screening Questions Answered',
                      f"{applicant['fullname']} has submitted answers to the screening questions for {job['title']}. You can now review them and schedule an interview.", 'info'))
                      
         conn.commit()
+        # Send email to recruiter
+        send_questions_answered_email(recruiter['email'], recruiter['fullname'], applicant['fullname'], job['title'])
         flash('Responses saved! Waiting for recruiter to schedule the interview.', 'success')
         conn.close()
         return redirect(url_for('my_applications'))
@@ -1205,15 +1418,19 @@ def reschedule_interview(app_id):
     
     new_date = request.form.get('date')
     new_time = request.form.get('time')
+    interview_type = request.form.get('interview_type', interview['interview_type'] if 'interview_type' in interview.keys() else 'virtual')
+    location = request.form.get('location', interview['location'] if 'location' in interview.keys() else '')
+    additional_instructions = request.form.get('additional_instructions', interview['additional_instructions'] if 'additional_instructions' in interview.keys() else '')
     
     old_date = interview['scheduled_date']
     old_time = interview['scheduled_time']
     
-    conn.execute('UPDATE interviews SET scheduled_date=?, scheduled_time=? WHERE id=?',
-                (new_date, new_time, interview['id']))
+    conn.execute('UPDATE interviews SET scheduled_date=?, scheduled_time=?, interview_type=?, location=?, additional_instructions=? WHERE id=?',
+                (new_date, new_time, interview_type, location, additional_instructions, interview['id']))
     
     job = conn.execute('SELECT title, company FROM jobs WHERE id=?', (application['job_id'],)).fetchone()
     recruiter = conn.execute('SELECT fullname FROM users WHERE id=?', (session['user_id'],)).fetchone()
+    applicant = conn.execute('SELECT fullname, email FROM users WHERE id=?', (application['applicant_id'],)).fetchone()
     
     # Notify applicant about reschedule
     conn.execute('''INSERT INTO notifications (user_id, title, message, type)
@@ -1228,6 +1445,8 @@ def reschedule_interview(app_id):
                  f'You successfully rescheduled the interview to {new_date} at {new_time}.', 'info'))
     
     conn.commit()
+    # Send email
+    send_interview_rescheduled_email(applicant['email'], applicant['fullname'], job['title'], job['company'], old_date, old_time, new_date, new_time, recruiter['fullname'], interview_type, location, additional_instructions)
     conn.close()
     return jsonify({'success': True, 'message': 'Interview rescheduled successfully!'})
 
