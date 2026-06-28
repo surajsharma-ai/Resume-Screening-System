@@ -42,6 +42,8 @@ An intelligent, end-to-end recruitment platform that leverages **NLP and Machine
 Pending → Selected → Questions Answered → Interview Scheduled → Interviewed → Hired / Rejected
 ```
 - Custom screening questions per job
+- **Virtual or In-Person interviews** — recruiters choose the type when scheduling
+- In-person interviews include **location/address** and **additional instructions** (dress code, documents to carry)
 - Interview scheduling with date/time picker
 - Interview rescheduling with automatic notifications
 - One-click hire/reject with candidate notifications
@@ -59,6 +61,17 @@ Pending → Selected → Questions Answered → Interview Scheduled → Intervie
 - **Configurable** via environment variables (Gmail, Outlook, custom SMTP)
 - **Opt-in by default** — set `EMAIL_ENABLED=true` to activate
 
+### 🔐 Google OAuth Login
+- **"Continue with Google"** for both recruiters and applicants
+- Automatic account creation on first Google sign-in
+- Uses Google email as username for seamless integration
+- Configured via `.env` file (Client ID & Client Secret)
+
+### 🗑️ Account Management
+- **Delete Account** option in both recruiter and applicant dashboards
+- Cascading deletion — removes all jobs, applications, interviews, notifications, and user data
+- Confirmation dialog to prevent accidental deletion
+
 ---
 
 ## 🛠️ Tech Stack
@@ -71,9 +84,11 @@ Pending → Selected → Questions Answered → Interview Scheduled → Intervie
 | **Frontend** | HTML5, CSS3, JavaScript, Jinja2 |
 | **Charts** | Chart.js 4.x |
 | **Security** | bcrypt (password hashing) |
+| **OAuth** | Authlib (Google OAuth 2.0) |
 | **File Parsing** | PyPDF2 (PDF extraction) |
 | **PDF Generation** | FPDF |
 | **Email** | SMTP (smtplib), HTML templates |
+| **Config** | python-dotenv (.env files) |
 
 ---
 
@@ -100,7 +115,7 @@ Pending → Selected → Questions Answered → Interview Scheduled → Intervie
 
 3. **Install dependencies**
    ```bash
-   pip install flask bcrypt scikit-learn PyPDF2 fpdf2
+   pip install flask bcrypt scikit-learn PyPDF2 fpdf2 authlib requests python-dotenv
    ```
 
 4. **Run the application**
@@ -113,12 +128,16 @@ Pending → Selected → Questions Answered → Interview Scheduled → Intervie
    http://127.0.0.1:5000
    ```
 
-### Email Setup (Optional)
-To enable email notifications, open `email_service.py` and fill in your Gmail credentials:
-```python
-'SMTP_USERNAME': 'your-email@gmail.com',
-'SMTP_PASSWORD': 'your-app-password',    # Gmail App Password
-'SENDER_EMAIL': 'your-email@gmail.com',
+### Environment Variables Setup
+Create a `.env` file in the project root:
+```env
+# Google OAuth (get from https://console.cloud.google.com)
+GOOGLE_CLIENT_ID=your-google-client-id
+GOOGLE_CLIENT_SECRET=your-google-client-secret
+
+# Email Service - Gmail App Password (https://support.google.com/accounts/answer/185833)
+SMTP_USERNAME=your-email@gmail.com
+SMTP_PASSWORD=your-16-char-app-password
 ```
 > **Gmail users**: Use an [App Password](https://support.google.com/accounts/answer/185833), not your regular password.
 
@@ -161,7 +180,8 @@ Resume-Screening-System/
 │   ├── my_applications.html    # Application status tracker
 │   ├── answer_questions.html   # Screening question responses
 │   └── notifications.html      # Notification center
-└── .gitignore
+├── .env                        # Environment variables (secrets — not committed)
+├── .gitignore
 ```
 
 ---
