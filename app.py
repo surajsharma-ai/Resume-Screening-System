@@ -1273,6 +1273,69 @@ def browse_jobs():
     
     return render_template('browse_jobs.html', jobs=job_list, applied_ids=applied_ids)
 
+@app.route('/applicant/optimize/<int:job_id>', methods=['GET', 'POST'])
+def optimize_resume(job_id):
+    """AI Resume Optimizer — analyse resume against a job BEFORE applying."""
+    if session.get('role') != 'applicant':
+        return redirect(url_for('landing'))
+
+    conn = get_db()
+    job = conn.execute('SELECT * FROM jobs WHERE id=?', (job_id,)).fetchone()
+    conn.close()
+    if not job:
+        flash('Job not found', 'danger')
+        return redirect(url_for('browse_jobs'))
+
+    job = dict(job)
+    job['skills'] = json.loads(str(job['skills']) if job['skills'] else '[]')
+
+    analysis = None
+    if request.method == 'POST':
+        if 'resume' not in request.files or not request.files['resume'].filename:
+            flash('Please upload a resume PDF.', 'danger')
+        else:
+            file = request.files['resume']
+            if allowed_file(file.filename):
+                filename = secure_filename(f"opt_{session['user_id']}_{job_id}.pdf")
+                filepath = os.path.join(UPLOAD_FOLDER, filename)
+                file.save(filepath)
+                resume_text = extract_text_from_file(filepath)
+                if not resume_text:
+                    flash('Could not extract text from resume.', 'danger')
+                else:
+                    jd = f"{job['description']} {job['requirements']}"
+                    result = calculate_match(resume_text, jd, job['skills'])
+
+                    # Build actionable tips
+                    tips = []
+                    if result['missing']:
+                        tips.append(f"Add these missing skills to your resume: <strong>{', '.join(result['missing'])}</strong>.")
+                    if result['experience'] == 0:
+                        tips.append("Mention your years of experience explicitly (e.g. '2 years of experience in...').")
+                    if result['match_score'] < 50:
+                        tips.append("Tailor your resume summary to closely mirror the job description language.")
+                    if result['match_score'] >= 70:
+                        tips.append("Great match! Your resume is well-aligned with this role.")
+
+                    # Projected score if all missing skills were added
+                    projected_skill_score = 100.0 if job['skills'] else result['skill_score']
+                    projected_overall = round((result['match_score'] - result['skill_score'] * 0.4) + projected_skill_score * 0.4, 1)
+
+                    analysis = {
+                        'match_score': result['match_score'],
+                        'skill_score': result['skill_score'],
+                        'matched': result['matched'],
+                        'missing': result['missing'],
+                        'experience': result['experience'],
+                        'tips': tips,
+                        'projected_score': min(projected_overall, 100.0),
+                        'method': result.get('method', 'TF-IDF')
+                    }
+            else:
+                flash('Only PDF files are accepted.', 'danger')
+
+    return render_template('optimize_resume.html', job=job, analysis=analysis)
+
 @app.route('/applicant/apply/<int:job_id>', methods=['GET', 'POST'])
 def apply_job(job_id):
     if session.get('role') != 'applicant':

@@ -38,6 +38,9 @@
                     {% if job.id in applied_ids %}
                     <span class="applied-badge"><i class="fas fa-check"></i> Applied</span>
                     {% else %}
+                    <a href="{{ url_for('optimize_resume', job_id=job.id) }}" class="btn btn-primary" style="margin-right:.4rem;">
+                        <i class="fas fa-magic"></i> Optimize
+                    </a>
                     <a href="{{ url_for('apply_job', job_id=job.id) }}" class="btn btn-success">
                         <i class="fas fa-paper-plane"></i> Apply
                     </a>

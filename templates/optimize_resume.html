@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Resume Optimizer — {{ job.title }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        .optimizer-hero {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 16px;
+            padding: 2rem;
+            color: #fff;
+            margin-bottom: 2rem;
+            display: flex;
+            align-items: center;
+            gap: 1.2rem;
+        }
+        .optimizer-hero i { font-size: 2.5rem; opacity: .85; }
+        .optimizer-hero h1 { margin: 0; font-size: 1.6rem; }
+        .optimizer-hero p  { margin: .3rem 0 0; opacity: .85; font-size: .95rem; }
+
+        .optimizer-upload {
+            background: #fff;
+            border: 2px dashed #667eea;
+            border-radius: 14px;
+            padding: 2.5rem;
+            text-align: center;
+            transition: border-color .25s;
+        }
+        .optimizer-upload:hover { border-color: #764ba2; }
+        .optimizer-upload h3 { color: #667eea; margin-bottom: .5rem; }
+        .optimizer-upload p  { color: #777; font-size: .9rem; margin-bottom: 1.5rem; }
+
+        /* Score cards row */
+        .score-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        .score-card {
+            border-radius: 12px;
+            padding: 1.2rem;
+            text-align: center;
+            color: #fff;
+            box-shadow: 0 4px 16px rgba(0,0,0,.1);
+        }
+        .score-card.current  { background: linear-gradient(135deg,#667eea,#764ba2); }
+        .score-card.projected{ background: linear-gradient(135deg,#28a745,#20c997); }
+        .score-card.skill    { background: linear-gradient(135deg,#fd7e14,#ffc107); }
+        .score-card .val { font-size: 2.2rem; font-weight: 700; line-height: 1; }
+        .score-card .lbl { font-size: .8rem; opacity: .9; margin-top: .3rem; }
+
+        /* Progress bar */
+        .score-bar-wrap { background: #e9ecef; border-radius: 50px; height: 10px; margin: .4rem 0 1rem; overflow: hidden; }
+        .score-bar      { height: 100%; border-radius: 50px; transition: width .6s ease; }
+        .score-bar.high   { background: linear-gradient(90deg,#28a745,#20c997); }
+        .score-bar.medium { background: linear-gradient(90deg,#ffc107,#fd7e14); }
+        .score-bar.low    { background: linear-gradient(90deg,#dc3545,#e07b54); }
+
+        /* Skills */
+        .skills-section { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem; }
+        .skills-box { background:#f8f9fa; border-radius:12px; padding:1rem; }
+        .skills-box h4 { margin-bottom:.6rem; font-size:.95rem; }
+        .tag.matched  { background:#d4edda; color:#155724; }
+        .tag.missing  { background:#f8d7da; color:#721c24; }
+
+        /* Tips */
+        .tips-box { background:#fff9e6; border-left:4px solid #ffc107; border-radius:10px; padding:1.2rem; }
+        .tips-box h4 { color:#856404; margin-bottom:.8rem; }
+        .tips-box li { margin-bottom:.5rem; font-size:.92rem; color:#5a4500; }
+
+        /* Method badge */
+        .method-badge {
+            display:inline-block; font-size:.72rem; padding:.2rem .6rem;
+            background:#e8e8ff; color:#667eea; border-radius:50px;
+            font-weight:600; margin-top:.3rem;
+        }
+
+        .apply-cta { margin-top:2rem; text-align:center; }
+        .apply-cta a { margin: 0 .5rem; }
+    </style>
+</head>
+<body>
+    <nav class="navbar applicant-nav">
+        <div class="nav-brand"><i class="fas fa-bullseye"></i> AI Resume Screener</div>
+        <div class="nav-links">
+            <a href="{{ url_for('applicant_dashboard') }}"><i class="fas fa-home"></i> Dashboard</a>
+            <a href="{{ url_for('browse_jobs') }}"><i class="fas fa-search"></i> Browse Jobs</a>
+            <a href="{{ url_for('my_applications') }}"><i class="fas fa-file-alt"></i> My Applications</a>
+            <a href="{{ url_for('logout') }}" class="btn-logout"><i class="fas fa-sign-out-alt"></i> Logout</a>
+        </div>
+    </nav>
+
+    <div class="container">
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}{% for category, message in messages %}
+        <div class="alert alert-{{ category }}" style="margin-bottom:1rem;">{{ message }}</div>
+        {% endfor %}{% endif %}
+        {% endwith %}
+
+        <!-- Hero -->
+        <div class="optimizer-hero">
+            <i class="fas fa-magic"></i>
+            <div>
+                <h1>AI Resume Optimizer</h1>
+                <p>Upload your resume and get instant feedback before applying to <strong>{{ job.title }}</strong> at <strong>{{ job.company }}</strong>.</p>
+            </div>
+        </div>
+
+        {% if not analysis %}
+        <!-- Upload form -->
+        <div class="optimizer-upload">
+            <h3><i class="fas fa-upload"></i> Upload Your Resume</h3>
+            <p>We'll analyse it against the job description using BERT and show you exactly what to improve.</p>
+            <form method="POST" enctype="multipart/form-data" id="optForm">
+                <input type="file" name="resume" id="resumeFile" accept=".pdf" required style="display:none;">
+                <label for="resumeFile" class="btn btn-primary" style="cursor:pointer; display:inline-block; margin-bottom:1rem;">
+                    <i class="fas fa-file-pdf"></i> Choose PDF
+                </label>
+                <div id="fileLabel" style="color:#555; margin-bottom:1rem;"></div>
+                <br>
+                <button type="submit" class="btn btn-success" id="analyseBtn">
+                    <i class="fas fa-brain"></i> Analyse Resume
+                </button>
+            </form>
+        </div>
+
+        <!-- Job quick info -->
+        <div class="job-detail-card" style="margin-top:1.5rem;">
+            <h4><i class="fas fa-briefcase"></i> {{ job.title }} — Required Skills</h4>
+            <div class="skill-tags">
+                {% for s in job.skills %}<span class="tag">{{ s }}</span>{% endfor %}
+                {% if not job.skills %}<span class="text-muted">No specific skills listed.</span>{% endif %}
+            </div>
+        </div>
+
+        {% else %}
+        <!-- ===== ANALYSIS RESULTS ===== -->
+
+        <!-- Score cards -->
+        <div class="score-row">
+            <div class="score-card current">
+                <div class="val">{{ analysis.match_score }}%</div>
+                <div class="lbl">Current Match Score</div>
+                <div class="method-badge" style="background:rgba(255,255,255,.2);color:#fff;">{{ analysis.method }}</div>
+            </div>
+            <div class="score-card projected">
+                <div class="val">{{ analysis.projected_score }}%</div>
+                <div class="lbl">Projected Score (if gaps filled)</div>
+            </div>
+            <div class="score-card skill">
+                <div class="val">{{ analysis.skill_score }}%</div>
+                <div class="lbl">Skill Match</div>
+            </div>
+        </div>
+
+        <!-- Progress bars -->
+        {% set bar_class = 'high' if analysis.match_score >= 70 else ('medium' if analysis.match_score >= 50 else 'low') %}
+        <div style="margin-bottom:1.5rem;">
+            <small>Current match</small>
+            <div class="score-bar-wrap">
+                <div class="score-bar {{ bar_class }}" style="width:{{ analysis.match_score }}%;"></div>
+            </div>
+            <small>Projected (if gaps filled)</small>
+            <div class="score-bar-wrap">
+                <div class="score-bar high" style="width:{{ analysis.projected_score }}%;"></div>
+            </div>
+        </div>
+
+        <!-- Skills breakdown -->
+        <div class="skills-section">
+            <div class="skills-box">
+                <h4><i class="fas fa-check-circle" style="color:#28a745;"></i> Matched Skills</h4>
+                <div class="skill-tags">
+                    {% for s in analysis.matched %}<span class="tag matched">{{ s }}</span>{% endfor %}
+                    {% if not analysis.matched %}<span style="color:#888;">None yet</span>{% endif %}
+                </div>
+            </div>
+            <div class="skills-box">
+                <h4><i class="fas fa-exclamation-triangle" style="color:#dc3545;"></i> Missing Skills</h4>
+                <div class="skill-tags">
+                    {% for s in analysis.missing %}<span class="tag missing">{{ s }}</span>{% endfor %}
+                    {% if not analysis.missing %}<span style="color:#28a745;font-weight:600;">No gaps! 🎉</span>{% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Actionable tips -->
+        {% if analysis.tips %}
+        <div class="tips-box" style="margin-bottom:1.5rem;">
+            <h4><i class="fas fa-lightbulb"></i> AI Suggestions</h4>
+            <ul>
+                {% for tip in analysis.tips %}
+                <li>{{ tip|safe }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        <!-- CTA -->
+        <div class="apply-cta">
+            <a href="{{ url_for('optimize_resume', job_id=job.id) }}" class="btn btn-primary">
+                <i class="fas fa-redo"></i> Re-analyse
+            </a>
+            <a href="{{ url_for('apply_job', job_id=job.id) }}" class="btn btn-success">
+                <i class="fas fa-paper-plane"></i> Apply Now
+            </a>
+            <a href="{{ url_for('browse_jobs') }}" class="btn btn-secondary" style="margin-top:.5rem;">
+                <i class="fas fa-arrow-left"></i> Back to Jobs
+            </a>
+        </div>
+        {% endif %}
+
+    </div>
+
+    <script>
+        document.getElementById('resumeFile').addEventListener('change', function() {
+            var lbl = document.getElementById('fileLabel');
+            lbl.textContent = this.files[0] ? '📄 ' + this.files[0].name : '';
+        });
+        var form = document.getElementById('optForm');
+        if (form) {
+            form.addEventListener('submit', function() {
+                var btn = document.getElementById('analyseBtn');
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Analysing with BERT…';
+                btn.disabled = true;
+            });
+        }
+    </script>
+</body>
+</html>
