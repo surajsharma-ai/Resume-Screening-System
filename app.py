@@ -24,12 +24,32 @@ from fpdf import FPDF
 import bcrypt
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+try:
+    from sentence_transformers import SentenceTransformer
+    import numpy as np
+    BERT_AVAILABLE = True
+except ImportError:
+    BERT_AVAILABLE = False
 from authlib.integrations.flask_client import OAuth
 
 # ==================== CONFIGURATION ====================
 os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 app = Flask(__name__)
 app.secret_key = 'your-secret-key-12345'
+
+# ==================== BERT MODEL ====================
+_bert_model = None
+
+def get_bert_model():
+    """Lazily load BERT model once and cache it globally."""
+    global _bert_model
+    if _bert_model is None and BERT_AVAILABLE:
+        try:
+            _bert_model = SentenceTransformer('all-MiniLM-L6-v2')
+            print('[BERT] Model loaded: all-MiniLM-L6-v2')
+        except Exception as e:
+            print(f'[BERT] Failed to load model: {e}')
+    return _bert_model
 
 # OAuth setup
 oauth = OAuth(app)
@@ -236,37 +256,61 @@ def anonymize_text(text):
     return '\n'.join(lines)
 
 def calculate_match(resume_text, job_desc, required_skills):
-    """Calculate match score using TF-IDF and skill matching"""
-    # TF-IDF Similarity
-    try:
-        vectorizer = TfidfVectorizer(stop_words='english')
-        matrix = vectorizer.fit_transform([resume_text.lower(), job_desc.lower()])
-        similarity = cosine_similarity(matrix[0:1], matrix[1:2])[0][0]
-    except:
-        similarity = 0
-    
-    # Skill matching
+    """Calculate match score using BERT semantic similarity (with TF-IDF fallback) and skill matching."""
+    similarity = 0
+    method_used = 'none'
+
+    # --- BERT Semantic Similarity (primary) ---
+    model = get_bert_model()
+    if model:
+        try:
+            embeddings = model.encode([resume_text.lower()[:512], job_desc.lower()[:512]])
+            # Cosine similarity between the two BERT embeddings
+            sim = np.dot(embeddings[0], embeddings[1]) / (
+                np.linalg.norm(embeddings[0]) * np.linalg.norm(embeddings[1]) + 1e-9
+            )
+            similarity = float(sim)
+            method_used = 'BERT (all-MiniLM-L6-v2)'
+        except Exception as e:
+            print(f'[BERT] Inference error, falling back to TF-IDF: {e}')
+
+    # --- TF-IDF Fallback ---
+    if method_used == 'none':
+        try:
+            vectorizer = TfidfVectorizer(stop_words='english')
+            matrix = vectorizer.fit_transform([resume_text.lower(), job_desc.lower()])
+            similarity = cosine_similarity(matrix[0:1], matrix[1:2])[0][0]
+            method_used = 'TF-IDF (fallback)'
+        except Exception as e:
+            print(f'[TF-IDF] Error: {e}')
+            similarity = 0
+            method_used = 'failed'
+
+    print(f'[Match] Similarity method: {method_used}, score: {round(similarity, 4)}')
+
+    # --- Skill matching ---
     resume_lower = resume_text.lower()
     found_skills = [s for s in SKILLS if re.search(r'\b' + re.escape(s) + r'\b', resume_lower)]
     required_set = set(s.lower() for s in required_skills)
     matched = list(required_set & set(found_skills))
     missing = list(required_set - set(found_skills))
     skill_pct = (len(matched) / len(required_set) * 100) if required_set else 0
-    
-    # Experience
+
+    # --- Experience ---
     exp_match = re.search(r'(\d+)\+?\s*(?:years?|yrs?)', resume_lower)
     experience = int(exp_match.group(1)) if exp_match else 0
-    
-    # Overall score
+
+    # --- Overall score: 60% semantic + 40% skill ---
     overall = (similarity * 60) + (skill_pct * 0.4)
-    
+
     return {
         'match_score': round(float(overall), 1),
         'skill_score': round(float(skill_pct), 1),
         'matched': matched,
         'missing': missing,
         'experience': experience,
-        'all_skills': found_skills
+        'all_skills': found_skills,
+        'method': method_used
     }
 
 # ==================== ROUTES ====================

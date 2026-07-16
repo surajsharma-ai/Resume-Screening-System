@@ -13,10 +13,11 @@ An intelligent, end-to-end recruitment platform that leverages **NLP and Machine
 ## ✨ Key Features
 
 ### 🤖 AI-Powered Resume Analysis
-- **TF-IDF Vectorization & Cosine Similarity** for intelligent resume-to-job matching
+- **BERT Semantic Matching** (`all-MiniLM-L6-v2` via `sentence-transformers`) for deep, context-aware resume-to-job matching
+- **TF-IDF + Cosine Similarity** retained as automatic fallback if BERT is unavailable
 - **Automated Skill Extraction** against a curated skills database
 - **Experience Detection** using regex pattern matching
-- **Weighted Scoring** (60% semantic similarity + 40% keyword match)
+- **Weighted Scoring** (60% BERT semantic similarity + 40% keyword match)
 
 ### 🔒 Bias-Free Screening
 - **Resume Anonymization Engine** removes names, emails, phone numbers, and gender-specific words using Regex
@@ -80,7 +81,7 @@ Pending → Selected → Questions Answered → Interview Scheduled → Intervie
 |-------|-----------|
 | **Backend** | Python, Flask |
 | **Database** | SQLite3 |
-| **AI/ML** | scikit-learn (TF-IDF, Cosine Similarity) |
+| **AI/ML** | BERT (`sentence-transformers`, `all-MiniLM-L6-v2`), scikit-learn (TF-IDF fallback) |
 | **Frontend** | HTML5, CSS3, JavaScript, Jinja2 |
 | **Charts** | Chart.js 4.x |
 | **Security** | bcrypt (password hashing) |
@@ -115,8 +116,9 @@ Pending → Selected → Questions Answered → Interview Scheduled → Intervie
 
 3. **Install dependencies**
    ```bash
-   pip install flask bcrypt scikit-learn PyPDF2 fpdf2 authlib requests python-dotenv
+   pip install flask bcrypt scikit-learn PyPDF2 fpdf2 authlib requests python-dotenv sentence-transformers
    ```
+   > **Note**: `sentence-transformers` will automatically download the BERT model (~90MB) on first run and cache it locally.
 
 4. **Run the application**
    ```bash
@@ -215,7 +217,7 @@ Live camera, screen sharing, interview timer, questions checklist, and post-inte
 
 ## 🔮 Future Scope
 
-- **Transformer Models** (BERT/GPT) for deeper semantic resume understanding
+- **Transformer Models** (BERT/GPT) for deeper semantic resume understanding ✅ *Done — now using `all-MiniLM-L6-v2`*
 - **Real-time Emotion Detection** during video interviews
 - **SMS/Email Integration** via Twilio/SendGrid
 - **LinkedIn Profile Verification** for resume claim validation
