@@ -232,8 +232,8 @@ def extract_text_from_file(filepath):
             from docx import Document
             doc = Document(filepath)
             return ' '.join([p.text for p in doc.paragraphs])
-    except:
-        pass
+    except Exception as e:
+        print(f"Error extracting text from {filepath}: {e}")
     return ''
 
 def anonymize_text(text):
@@ -1249,8 +1249,40 @@ def applicant_dashboard():
     conn = get_db()
     notif_count = conn.execute('SELECT COUNT(*) FROM notifications WHERE user_id=? AND is_read=0',
                                (session['user_id'],)).fetchone()[0]
+    
+    # Job Recommendation Engine
+    # 1. Get latest resume text from the user's past applications
+    latest_app = conn.execute('SELECT resume_text FROM applications WHERE applicant_id=? ORDER BY id DESC LIMIT 1',
+                              (session['user_id'],)).fetchone()
+    
+    recommended_jobs = []
+    if latest_app and latest_app['resume_text']:
+        resume_text = latest_app['resume_text']
+        # 2. Get all active jobs the user hasn't applied to
+        jobs = conn.execute('''
+            SELECT * FROM jobs 
+            WHERE status='active' AND id NOT IN (
+                SELECT job_id FROM applications WHERE applicant_id=?
+            )
+        ''', (session['user_id'],)).fetchall()
+        
+        # 3. Score each job using BERT/TF-IDF
+        job_scores = []
+        for j in jobs:
+            job_dict = dict(j)
+            skills = json.loads(str(job_dict['skills']) if job_dict['skills'] else '[]')
+            jd = f"{job_dict['description']} {job_dict['requirements']}"
+            result = calculate_match(resume_text, jd, skills)
+            job_dict['match_score'] = result['match_score']
+            job_dict['skills_list'] = skills
+            job_scores.append(job_dict)
+        
+        # 4. Sort and take top 3
+        job_scores.sort(key=lambda x: x['match_score'], reverse=True)
+        recommended_jobs = job_scores[:3]
+
     conn.close()
-    return render_template('applicant_dashboard.html', notif_count=notif_count)
+    return render_template('applicant_dashboard.html', notif_count=notif_count, recommended_jobs=recommended_jobs)
 
 @app.route('/applicant/jobs')
 def browse_jobs():
