@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Shortlist</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        .shortlist-header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;
+        }
+        .shortlist-card {
+            background: #fff; border-radius: 14px; padding: 1.5rem;
+            margin-bottom: 1.2rem; box-shadow: 0 2px 12px rgba(0,0,0,.06);
+            border-left: 5px solid #667eea; transition: transform .2s, box-shadow .2s;
+        }
+        .shortlist-card:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,0,0,.1); }
+        .shortlist-card .card-top {
+            display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: .5rem;
+        }
+        .shortlist-card .candidate-name { font-size: 1.15rem; font-weight: 600; color: #333; }
+        .shortlist-card .job-label { font-size: .85rem; color: #667eea; font-weight: 500; }
+        .shortlist-card .contact-info { font-size: .85rem; color: #666; margin-top: .3rem; }
+        .scores-inline { display: flex; gap: 1rem; margin: .8rem 0; flex-wrap: wrap; }
+        .scores-inline .score-pill {
+            background: #f0f0ff; border-radius: 50px; padding: .3rem .8rem;
+            font-size: .82rem; font-weight: 600; color: #444;
+        }
+        .scores-inline .score-pill.high { background: #d4edda; color: #155724; }
+        .scores-inline .score-pill.medium { background: #fff3cd; color: #856404; }
+        .scores-inline .score-pill.low { background: #f8d7da; color: #721c24; }
+        .note-section { margin-top: .8rem; }
+        .note-section textarea {
+            width: 100%; border: 1px solid #ddd; border-radius: 8px;
+            padding: .6rem; font-size: .9rem; resize: vertical; min-height: 50px;
+            font-family: 'Poppins', sans-serif; transition: border-color .2s;
+        }
+        .note-section textarea:focus { border-color: #667eea; outline: none; }
+        .note-actions { display: flex; gap: .5rem; margin-top: .5rem; align-items: center; }
+        .note-actions .save-status { font-size: .8rem; color: #28a745; display: none; }
+        .card-actions { display: flex; gap: .5rem; margin-top: .8rem; flex-wrap: wrap; }
+        .empty-shortlist {
+            text-align: center; padding: 4rem 2rem; background: #f8f9fa;
+            border-radius: 14px; color: #888;
+        }
+        .empty-shortlist i { font-size: 3rem; margin-bottom: 1rem; color: #ccc; }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand"><i class="fas fa-bullseye"></i> AI Resume Screener</div>
+        <div class="nav-links">
+            <a href="{{ url_for('recruiter_dashboard') }}"><i class="fas fa-home"></i> Dashboard</a>
+            <a href="{{ url_for('view_shortlist') }}"><i class="fas fa-bookmark"></i> Shortlist</a>
+            <a href="{{ url_for('post_job') }}"><i class="fas fa-plus"></i> Post Job</a>
+            <a href="{{ url_for('logout') }}" class="btn-logout"><i class="fas fa-sign-out-alt"></i> Logout</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="shortlist-header">
+            <div>
+                <h1><i class="fas fa-bookmark" style="color:#667eea;"></i> My Shortlist</h1>
+                <p style="color:#666; font-size:.92rem;">{{ shortlist|length }} candidate{{ 's' if shortlist|length != 1 }} bookmarked</p>
+            </div>
+            {% if shortlist %}
+            <a href="{{ url_for('export_shortlist_pdf') }}" class="btn btn-success">
+                <i class="fas fa-file-pdf"></i> Export PDF Report
+            </a>
+            {% endif %}
+        </div>
+
+        {% if shortlist %}
+        {% for item in shortlist %}
+        <div class="shortlist-card" id="sl-card-{{ item.application_id }}">
+            <div class="card-top">
+                <div>
+                    <div class="candidate-name">{{ item.fullname }}</div>
+                    <div class="job-label"><i class="fas fa-briefcase"></i> {{ item.job_title }} — {{ item.company }}</div>
+                    <div class="contact-info">
+                        <i class="fas fa-envelope"></i> {{ item.email }}
+                        {% if item.phone %} &nbsp;|&nbsp; <i class="fas fa-phone"></i> {{ item.phone }}{% endif %}
+                    </div>
+                </div>
+                <span class="status-badge {{ item.app_status }}">
+                    {{ item.app_status|upper|replace('_', ' ') }}
+                </span>
+            </div>
+
+            <div class="scores-inline">
+                <span class="score-pill {% if item.match_score >= 70 %}high{% elif item.match_score >= 50 %}medium{% else %}low{% endif %}">
+                    <i class="fas fa-chart-line"></i> {{ "%.0f"|format(item.match_score) }}% Match
+                </span>
+                <span class="score-pill">
+                    <i class="fas fa-cogs"></i> {{ "%.0f"|format(item.skill_score) }}% Skills
+                </span>
+                <span class="score-pill">
+                    <i class="fas fa-clock"></i> {{ item.experience }} yrs
+                </span>
+            </div>
+
+            <div class="skills-section" style="display:grid; grid-template-columns:1fr 1fr; gap:.8rem;">
+                <div>
+                    <small style="color:#28a745; font-weight:600;"><i class="fas fa-check"></i> Matched</small>
+                    <div class="skill-tags" style="margin-top:.3rem;">
+                        {% for s in item.matched_skills %}<span class="tag success">{{ s }}</span>{% endfor %}
+                        {% if not item.matched_skills %}<span style="color:#aaa;">—</span>{% endif %}
+                    </div>
+                </div>
+                <div>
+                    <small style="color:#dc3545; font-weight:600;"><i class="fas fa-times"></i> Missing</small>
+                    <div class="skill-tags" style="margin-top:.3rem;">
+                        {% for s in item.missing_skills %}<span class="tag danger">{{ s }}</span>{% endfor %}
+                        {% if not item.missing_skills %}<span style="color:#28a745;">No gaps!</span>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="note-section">
+                <label style="font-weight:600; font-size:.85rem; color:#555;"><i class="fas fa-sticky-note"></i> Notes</label>
+                <textarea id="note-{{ item.application_id }}" placeholder="Add private notes about this candidate...">{{ item.note or '' }}</textarea>
+                <div class="note-actions">
+                    <button class="btn btn-primary" style="padding:.3rem .8rem; font-size:.82rem;" onclick="saveNote({{ item.application_id }})">
+                        <i class="fas fa-save"></i> Save
+                    </button>
+                    <span class="save-status" id="saved-{{ item.application_id }}"><i class="fas fa-check"></i> Saved!</span>
+                </div>
+            </div>
+
+            <div class="card-actions">
+                <a href="{{ url_for('view_applications', job_id=item.job_id) }}" class="btn btn-info" style="padding:.35rem .8rem; font-size:.82rem;">
+                    <i class="fas fa-eye"></i> View Application
+                </a>
+                <button class="btn btn-reject" style="padding:.35rem .8rem; font-size:.82rem;" onclick="removeFromShortlist({{ item.application_id }})">
+                    <i class="fas fa-trash"></i> Remove
+                </button>
+            </div>
+        </div>
+        {% endfor %}
+        {% else %}
+        <div class="empty-shortlist">
+            <i class="fas fa-bookmark"></i>
+            <p>Your shortlist is empty.</p>
+            <p style="font-size:.9rem;">Go to any job's applications and click the <strong>Bookmark</strong> button to save candidates here.</p>
+            <a href="{{ url_for('recruiter_dashboard') }}" class="btn btn-primary" style="margin-top:1rem;">
+                <i class="fas fa-arrow-left"></i> Back to Dashboard
+            </a>
+        </div>
+        {% endif %}
+    </div>
+
+    <script>
+        function saveNote(appId) {
+            const note = document.getElementById('note-' + appId).value;
+            const formData = new FormData();
+            formData.append('note', note);
+            fetch('/recruiter/shortlist/note/' + appId, { method: 'POST', body: formData })
+                .then(r => r.json())
+                .then(d => {
+                    if (d.success) {
+                        const el = document.getElementById('saved-' + appId);
+                        el.style.display = 'inline';
+                        setTimeout(() => el.style.display = 'none', 2000);
+                    }
+                });
+        }
+
+        function removeFromShortlist(appId) {
+            if (!confirm('Remove this candidate from your shortlist?')) return;
+            fetch('/recruiter/shortlist/remove/' + appId, { method: 'POST' })
+                .then(r => r.json())
+                .then(d => {
+                    if (d.success) {
+                        const card = document.getElementById('sl-card-' + appId);
+                        card.style.transition = 'opacity .3s, transform .3s';
+                        card.style.opacity = '0';
+                        card.style.transform = 'translateX(30px)';
+                        setTimeout(() => { card.remove(); location.reload(); }, 300);
+                    }
+                });
+        }
+    </script>
+</body>
+</html>

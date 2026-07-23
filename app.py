@@ -175,6 +175,16 @@ def init_db():
             response TEXT,
             UNIQUE(application_id, question_id)
         );
+
+        CREATE TABLE IF NOT EXISTS shortlist (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            recruiter_id INTEGER,
+            application_id INTEGER,
+            job_id INTEGER,
+            note TEXT DEFAULT '',
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(recruiter_id, application_id)
+        );
     ''')
     # Migration: add created_at columns to existing tables if missing
     try:
@@ -837,7 +847,10 @@ def view_applications(job_id):
     job = conn.execute('SELECT * FROM jobs WHERE id=?', (job_id,)).fetchone()
     apps = conn.execute('''SELECT * FROM applications WHERE job_id=? 
                           ORDER BY match_score DESC''', (job_id,)).fetchall()
+    shortlisted = conn.execute('SELECT application_id FROM shortlist WHERE recruiter_id=?',
+                               (session['user_id'],)).fetchall()
     conn.close()
+    shortlisted_ids = set(s['application_id'] for s in shortlisted)
     
     if not job:
         flash('Job not found', 'danger')
@@ -854,7 +867,7 @@ def view_applications(job_id):
         app['missing_skills'] = json.loads(str(app['missing_skills']) if app['missing_skills'] else '[]')
         applications.append(app)
     
-    return render_template('view_applications.html', job=job, applications=applications)
+    return render_template('view_applications.html', job=job, applications=applications, shortlisted_ids=shortlisted_ids)
 
 @app.route('/recruiter/details/<int:app_id>')
 def get_details(app_id):
@@ -1239,6 +1252,119 @@ def view_responses(app_id):
         data = [{'question': r['question'], 'response': r['response'], 'order': r['question_order']} for r in responses]
         return jsonify({'success': True, 'responses': data})
     return jsonify({'success': False, 'message': 'No responses found'})
+
+@app.route('/recruiter/shortlist/add/<int:app_id>', methods=['POST'])
+def add_to_shortlist(app_id):
+    if session.get('role') != 'recruiter':
+        return jsonify({'success': False})
+    conn = get_db()
+    app_row = conn.execute('SELECT * FROM applications a JOIN jobs j ON a.job_id=j.id WHERE a.id=? AND j.recruiter_id=?',
+                           (app_id, session['user_id'])).fetchone()
+    if not app_row:
+        conn.close()
+        return jsonify({'success': False, 'message': 'Application not found'})
+    try:
+        conn.execute('INSERT INTO shortlist (recruiter_id, application_id, job_id) VALUES (?, ?, ?)',
+                     (session['user_id'], app_id, app_row['job_id']))
+        conn.commit()
+        conn.close()
+        return jsonify({'success': True, 'message': 'Added to shortlist!'})
+    except sqlite3.IntegrityError:
+        conn.close()
+        return jsonify({'success': False, 'message': 'Already in shortlist'})
+
+@app.route('/recruiter/shortlist/remove/<int:app_id>', methods=['POST'])
+def remove_from_shortlist(app_id):
+    if session.get('role') != 'recruiter':
+        return jsonify({'success': False})
+    conn = get_db()
+    conn.execute('DELETE FROM shortlist WHERE recruiter_id=? AND application_id=?',
+                 (session['user_id'], app_id))
+    conn.commit()
+    conn.close()
+    return jsonify({'success': True, 'message': 'Removed from shortlist'})
+
+@app.route('/recruiter/shortlist/note/<int:app_id>', methods=['POST'])
+def update_shortlist_note(app_id):
+    if session.get('role') != 'recruiter':
+        return jsonify({'success': False})
+    note = request.form.get('note', '')
+    conn = get_db()
+    conn.execute('UPDATE shortlist SET note=? WHERE recruiter_id=? AND application_id=?',
+                 (note, session['user_id'], app_id))
+    conn.commit()
+    conn.close()
+    return jsonify({'success': True, 'message': 'Note saved!'})
+
+@app.route('/recruiter/shortlist')
+def view_shortlist():
+    if session.get('role') != 'recruiter':
+        return redirect(url_for('landing'))
+    conn = get_db()
+    items = conn.execute('''SELECT s.*, a.match_score, a.skill_score, a.experience, a.status as app_status,
+                            a.matched_skills, a.missing_skills,
+                            j.title as job_title, j.company, u.fullname, u.email, u.phone
+                            FROM shortlist s
+                            JOIN applications a ON s.application_id=a.id
+                            JOIN jobs j ON s.job_id=j.id
+                            JOIN users u ON a.applicant_id=u.id
+                            WHERE s.recruiter_id=?
+                            ORDER BY a.match_score DESC''', (session['user_id'],)).fetchall()
+    conn.close()
+    shortlist_items = []
+    for item in items:
+        d = dict(item)
+        d['matched_skills'] = json.loads(str(d['matched_skills']) if d['matched_skills'] else '[]')
+        d['missing_skills'] = json.loads(str(d['missing_skills']) if d['missing_skills'] else '[]')
+        shortlist_items.append(d)
+    return render_template('shortlist.html', shortlist=shortlist_items)
+
+@app.route('/recruiter/shortlist/export-pdf')
+def export_shortlist_pdf():
+    if session.get('role') != 'recruiter':
+        return redirect(url_for('landing'))
+    conn = get_db()
+    items = conn.execute('''SELECT s.note, a.match_score, a.skill_score, a.experience, a.status as app_status,
+                            a.matched_skills, a.missing_skills,
+                            j.title as job_title, j.company, u.fullname, u.email, u.phone
+                            FROM shortlist s
+                            JOIN applications a ON s.application_id=a.id
+                            JOIN jobs j ON s.job_id=j.id
+                            JOIN users u ON a.applicant_id=u.id
+                            WHERE s.recruiter_id=?
+                            ORDER BY a.match_score DESC''', (session['user_id'],)).fetchall()
+    conn.close()
+
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font('Helvetica', 'B', 18)
+    pdf.cell(0, 12, 'Shortlisted Candidates Report', ln=True, align='C')
+    pdf.set_font('Helvetica', '', 10)
+    pdf.cell(0, 8, f'Generated by {session.get("fullname", "Recruiter")} on {datetime.now().strftime("%Y-%m-%d %H:%M")}', ln=True, align='C')
+    pdf.ln(8)
+
+    for i, item in enumerate(items, 1):
+        matched = json.loads(str(item['matched_skills']) if item['matched_skills'] else '[]')
+        missing = json.loads(str(item['missing_skills']) if item['missing_skills'] else '[]')
+        pdf.set_font('Helvetica', 'B', 12)
+        pdf.cell(0, 8, f'{i}. {item["fullname"]}', ln=True)
+        pdf.set_font('Helvetica', '', 10)
+        pdf.cell(0, 6, f'   Job: {item["job_title"]} at {item["company"]}', ln=True)
+        pdf.cell(0, 6, f'   Email: {item["email"]}  |  Phone: {item["phone"] or "N/A"}', ln=True)
+        pdf.cell(0, 6, f'   Match Score: {item["match_score"]}%  |  Skill Score: {item["skill_score"]}%  |  Experience: {item["experience"]} yrs', ln=True)
+        pdf.cell(0, 6, f'   Status: {item["app_status"].upper()}', ln=True)
+        if matched:
+            pdf.cell(0, 6, f'   Matched Skills: {", ".join(matched)}', ln=True)
+        if missing:
+            pdf.cell(0, 6, f'   Missing Skills: {", ".join(missing)}', ln=True)
+        if item['note']:
+            pdf.cell(0, 6, f'   Note: {item["note"]}', ln=True)
+        pdf.ln(4)
+
+    buffer = BytesIO()
+    pdf.output(buffer)
+    buffer.seek(0)
+    return send_file(buffer, as_attachment=True, download_name='Shortlist_Report.pdf', mimetype='application/pdf')
 
 # -------- APPLICANT PAGES --------
 @app.route('/applicant/dashboard')

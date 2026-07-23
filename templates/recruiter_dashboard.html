@@ -16,6 +16,7 @@
         <div class="nav-brand"><i class="fas fa-bullseye"></i> AI Resume Screener</div>
         <div class="nav-links">
             <a href="{{ url_for('recruiter_dashboard') }}"><i class="fas fa-home"></i> Dashboard</a>
+            <a href="{{ url_for('view_shortlist') }}"><i class="fas fa-bookmark"></i> Shortlist</a>
             <a href="{{ url_for('post_job') }}"><i class="fas fa-plus"></i> Post Job</a>
             <a href="{{ url_for('recruiter_notifications') }}"><i class="fas fa-bell"></i> Notifications{% if notif_count %} <span class="badge">{{ notif_count }}</span>{% endif %}</a>
             <a href="{{ url_for('logout') }}" class="btn-logout"><i class="fas fa-sign-out-alt"></i> Logout</a>
