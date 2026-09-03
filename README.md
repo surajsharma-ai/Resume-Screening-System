@@ -138,10 +138,10 @@ flowchart TD
     subgraph Applicant["👤 Applicant Journey"]
         A_Start["Sign Up / Google OAuth"] --> A_Browse["Browse Jobs & Recommendations"]
         A_Browse --> A_Opt{"Run AI Optimizer?"}
-        A_Opt -- "Yes" --> A_Optimize["Review Match Score & Skill Gaps"]
+        A_Opt -->|Yes| A_Optimize["Review Match Score & Skill Gaps"]
         A_Optimize --> A_Apply["Upload Resume (PDF) & Apply"]
-        A_Opt -- "No" --> A_Apply
-        A_Wait["Track Status in 'My Applications'"] <-- A_Apply
+        A_Opt -->|No| A_Apply
+        A_Apply --> A_Wait["Track Status in My Applications"]
         A_Questions["Answer Custom Screening Questions"]
         A_Interview["Join Waiting Lobby & WebRTC Room"]
         A_Hired["Receive Formal Offer Letter 🎉"]
@@ -174,11 +174,18 @@ flowchart TD
 
     %% Process Connections
     R_Post -.-> A_Browse
-    A_Apply --> SYS_Extract --> SYS_Anon --> SYS_BERT & SYS_Skill --> SYS_Score --> R_Review
+    A_Apply --> SYS_Extract
+    SYS_Extract --> SYS_Anon
+    SYS_Anon --> SYS_BERT
+    SYS_Anon --> SYS_Skill
+    SYS_BERT --> SYS_Score
+    SYS_Skill --> SYS_Score
+    SYS_Score --> R_Review
+
     R_Review --> R_Decision
-    R_Decision -- "Shortlist" --> R_Shortlist
-    R_Decision -- "Reject" --> R_Reject
-    R_Decision -- "Select" --> R_Select
+    R_Decision -->|Shortlist| R_Shortlist
+    R_Decision -->|Reject| R_Reject
+    R_Decision -->|Select| R_Select
 
     R_Select --> SYS_Alert
     SYS_Alert -.-> A_Questions
@@ -189,11 +196,16 @@ flowchart TD
     R_Schedule --> SYS_Alert
     SYS_Alert -.-> A_Interview
 
-    A_Interview <--> R_Conduct
-    R_Conduct --> R_Score --> R_FinalDecision
+    A_Interview --- R_Conduct
+    R_Conduct --> R_Score
+    R_Score --> R_FinalDecision
 
-    R_FinalDecision -- "Hire" --> R_Hire --> SYS_Alert -.-> A_Hired
-    R_FinalDecision -- "Reject" --> R_Reject --> SYS_Alert -.-> A_Rejected
+    R_FinalDecision -->|Hire| R_Hire
+    R_FinalDecision -->|Reject| R_Reject
+    R_Hire --> SYS_Alert
+    SYS_Alert -.-> A_Hired
+    R_Reject --> SYS_Alert
+    SYS_Alert -.-> A_Rejected
 ```
 
 ---
@@ -207,12 +219,15 @@ flowchart LR
     PARSE --> RAW["Raw Resume String"]
 
     RAW --> ANON["Bias-Free Anonymization Engine<br/>(Regex Patterns)"]
-    ANON -->|Strip Emails| A1["Emails -> [EMAIL]"]
-    ANON -->|Strip Phone Numbers| A2["Phones -> [PHONE]"]
-    ANON -->|Strip Gender Pronouns| A3["Gender Pronouns -> Removed"]
-    ANON -->|Strip Header Names| A4["Candidate Name -> [NAME]"]
+    ANON --> A1["Mask Email Addresses"]
+    ANON --> A2["Mask Phone Numbers"]
+    ANON --> A3["Remove Gender Pronouns"]
+    ANON --> A4["Mask Candidate Name"]
     
-    A1 & A2 & A3 & A4 --> CLEAN["Clean Anonymized Resume Text"]
+    A1 --> CLEAN["Clean Anonymized Resume Text"]
+    A2 --> CLEAN
+    A3 --> CLEAN
+    A4 --> CLEAN
 
     CLEAN --> BERT["BERT Encoder (all-MiniLM-L6-v2)<br/>(384-dim Dense Embeddings)"]
     CLEAN --> TFIDF["TF-IDF Vectorizer<br/>(Fallback Sparse Matrix)"]
